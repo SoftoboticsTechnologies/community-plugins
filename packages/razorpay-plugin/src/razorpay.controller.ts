@@ -6,7 +6,6 @@ import {
     Logger,
     Order,
     OrderService,
-    PaymentMethodService,
     RequestContextService,
     TransactionalConnection,
 } from '@vendure/core';
@@ -25,7 +24,6 @@ const signatureErrorMessage = 'Error verifying Razorpay webhook signature';
 export class RazorpayController {
     constructor(
         @Inject(RAZORPAY_PLUGIN_OPTIONS) private options: RazorpayPluginOptions,
-        private paymentMethodService: PaymentMethodService,
         private orderService: OrderService,
         private requestContextService: RequestContextService,
         private connection: TransactionalConnection,
@@ -75,7 +73,7 @@ export class RazorpayController {
         const outerCtx = await this.createContext(channelToken, languageCode as LanguageCode, request);
 
         await this.connection.withTransaction(outerCtx, async (ctx: RequestContext) => {
-            const order = await this.orderService.findOneByCode(ctx, orderCode);
+            const order = await this.orderService.findOneByCode(ctx, orderCode, ['payments']);
             if (!order) {
                 Logger.error(`Unable to find order ${orderCode} for Razorpay webhook`, loggerCtx);
                 return;
