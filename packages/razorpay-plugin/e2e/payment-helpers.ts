@@ -7,9 +7,9 @@ export async function setShipping(shopClient: SimpleGraphQLClient): Promise<void
         input: {
             fullName: 'name',
             streetLine1: '12 the street',
-            city: 'Bengaluru',
-            postalCode: '560001',
-            countryCode: 'IN',
+            city: 'Leeuwarden',
+            postalCode: '123456',
+            countryCode: 'AT',
         },
     });
     const { eligibleShippingMethods } = await shopClient.query(GET_ELIGIBLE_SHIPPING_METHODS);
