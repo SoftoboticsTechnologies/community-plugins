@@ -1,17 +1,26 @@
 import { AdminUiPlugin } from '@vendure/admin-ui-plugin';
-import { DefaultLogger, LogLevel, mergeConfig } from '@vendure/core';
+import { DefaultLogger, Logger, LogLevel, mergeConfig } from '@vendure/core';
 import { createTestEnvironment, registerInitializer, SqljsInitializer, testConfig } from '@vendure/testing';
 import path from 'path';
 
+import { initialData } from '../../../e2e-common/e2e-initial-data';
 import { RazorpayPlugin } from '../src';
 
-import { ADD_ITEM_TO_ORDER } from './graphql/shop-queries';
 import { CREATE_PAYMENT_METHOD } from './graphql/admin-queries';
-import { CREATE_RAZORPAY_ORDER } from './graphql/shop-queries';
+import { ADD_ITEM_TO_ORDER, CREATE_RAZORPAY_ORDER } from './graphql/shop-queries';
 import { setShipping } from './payment-helpers';
-import { initialData } from '../../../e2e-common/e2e-initial-data';
 
-(async () => {
+const loggerCtx = 'RazorpayDevServer';
+
+function requireEnv(name: string): string {
+    const value = process.env[name];
+    if (!value) {
+        throw new Error(`Missing required environment variable: ${name}`);
+    }
+    return value;
+}
+
+void (async () => {
     require('dotenv').config();
 
     registerInitializer('sqljs', new SqljsInitializer(path.join(__dirname, '__data__')));
@@ -23,14 +32,14 @@ import { initialData } from '../../../e2e-common/e2e-initial-data';
                 port: 5001,
             }),
             RazorpayPlugin.init({
-                apiKey: process.env.RAZORPAY_KEY_ID!,
-                apiSecret: process.env.RAZORPAY_KEY_SECRET!,
-                webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET!,
+                apiKey: requireEnv('RAZORPAY_KEY_ID'),
+                apiSecret: requireEnv('RAZORPAY_KEY_SECRET'),
+                webhookSecret: requireEnv('RAZORPAY_WEBHOOK_SECRET'),
             }),
         ],
         logger: new DefaultLogger({ level: LogLevel.Debug }),
     });
-    const { server, shopClient, adminClient } = createTestEnvironment(config as any);
+    const { server, shopClient, adminClient } = createTestEnvironment(config);
     await server.init({
         initialData,
         productsCsvPath: path.join(__dirname, 'fixtures/e2e-products-minimal.csv'),
@@ -47,7 +56,7 @@ import { initialData } from '../../../e2e-common/e2e-initial-data';
             ],
             handler: {
                 code: 'razorpay',
-                arguments: [{ name: 'apiSecret', value: process.env.RAZORPAY_KEY_SECRET! }],
+                arguments: [{ name: 'apiSecret', value: requireEnv('RAZORPAY_KEY_SECRET') }],
             },
         },
     });
@@ -57,8 +66,6 @@ import { initialData } from '../../../e2e-common/e2e-initial-data';
     await setShipping(shopClient);
     const { createRazorpayOrder } = await shopClient.query(CREATE_RAZORPAY_ORDER);
 
-    // eslint-disable-next-line no-console
-    console.log('Razorpay order created:', createRazorpayOrder);
-    // eslint-disable-next-line no-console
-    console.log('http://localhost:3050/checkout');
+    Logger.info(`Razorpay order created: ${JSON.stringify(createRazorpayOrder)}`, loggerCtx);
+    Logger.info('http://localhost:3050/checkout', loggerCtx);
 })();
