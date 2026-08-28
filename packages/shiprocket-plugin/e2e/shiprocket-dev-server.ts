@@ -3,11 +3,18 @@ import { DefaultLogger, LogLevel, mergeConfig } from '@vendure/core';
 import { createTestEnvironment, registerInitializer, SqljsInitializer, testConfig } from '@vendure/testing';
 import path from 'path';
 
+import { initialData } from '../../../e2e-common/e2e-initial-data';
 import { ShiprocketPlugin } from '../src';
 
-import { initialData } from '../../../e2e-common/e2e-initial-data';
+function requireEnv(name: string): string {
+    const value = process.env[name];
+    if (!value) {
+        throw new Error(`Missing required environment variable: ${name}`);
+    }
+    return value;
+}
 
-(async () => {
+void (async () => {
     require('dotenv').config();
 
     registerInitializer('sqljs', new SqljsInitializer(path.join(__dirname, '__data__')));
@@ -19,15 +26,15 @@ import { initialData } from '../../../e2e-common/e2e-initial-data';
                 port: 5001,
             }),
             ShiprocketPlugin.init({
-                email: process.env.SHIPROCKET_EMAIL!,
-                password: process.env.SHIPROCKET_PASSWORD!,
-                channelId: process.env.SHIPROCKET_CHANNEL_ID!,
+                email: requireEnv('SHIPROCKET_EMAIL'),
+                password: requireEnv('SHIPROCKET_PASSWORD'),
+                channelId: requireEnv('SHIPROCKET_CHANNEL_ID'),
                 pollIntervalMinutes: 15,
             }),
         ],
         logger: new DefaultLogger({ level: LogLevel.Debug }),
     });
-    const { server } = createTestEnvironment(config as any);
+    const { server } = createTestEnvironment(config);
     await server.init({
         initialData,
         productsCsvPath: path.join(__dirname, 'fixtures/e2e-products-minimal.csv'),
