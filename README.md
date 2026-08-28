@@ -40,6 +40,8 @@
 | [`@vendure-community/stellate-plugin`](packages/stellate-plugin)          | Stellate CDN cache purging                       | [![npm](https://img.shields.io/npm/v/@vendure-community/stellate-plugin)](https://www.npmjs.com/package/@vendure-community/stellate-plugin)           |
 | [`@vendure-community/pub-sub-plugin`](packages/pub-sub-plugin)            | Google Cloud Pub/Sub job queue strategy          | [![npm](https://img.shields.io/npm/v/@vendure-community/pub-sub-plugin)](https://www.npmjs.com/package/@vendure-community/pub-sub-plugin)             |
 | [`@vendure-community/punchout-gateway-plugin`](packages/punchout-gateway-plugin) | Punchout/cXML procurement gateway                | [![npm](https://img.shields.io/npm/v/@vendure-community/punchout-gateway-plugin)](https://www.npmjs.com/package/@vendure-community/punchout-gateway-plugin) |
+| [`@vendure-community/razorpay-plugin`](packages/razorpay-plugin)           | Razorpay payment integration                     | [![npm](https://img.shields.io/npm/v/@vendure-community/razorpay-plugin)](https://www.npmjs.com/package/@vendure-community/razorpay-plugin)           |
+| [`@vendure-community/shiprocket-plugin`](packages/shiprocket-plugin)       | Shiprocket shipping & fulfillment integration     | [![npm](https://img.shields.io/npm/v/@vendure-community/shiprocket-plugin)](https://www.npmjs.com/package/@vendure-community/shiprocket-plugin)       |
 
 ## Community Ownership
 
