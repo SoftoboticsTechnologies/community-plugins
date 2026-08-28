@@ -14,11 +14,17 @@ export function mapShiprocketStatusToFulfillmentState(
     if (status.includes('rto') || status.includes('cancel')) {
         return currentState === 'Cancelled' ? undefined : 'Cancelled';
     }
-    if (status.includes('delivered')) {
-        return currentState === 'Delivered' ? undefined : 'Delivered';
-    }
-    if (currentState === 'Pending' && (status.includes('in transit') || status.includes('shipped') || status.includes('picked up'))) {
+    if (
+        currentState === 'Pending' &&
+        (status.includes('in transit') ||
+            status.includes('shipped') ||
+            status.includes('picked up') ||
+            status.includes('delivered'))
+    ) {
         return 'Shipped';
+    }
+    if (currentState === 'Shipped' && status.includes('delivered')) {
+        return 'Delivered';
     }
     return undefined;
 }
