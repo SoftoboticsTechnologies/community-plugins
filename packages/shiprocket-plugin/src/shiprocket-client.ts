@@ -1,8 +1,11 @@
 import fetch from 'node-fetch';
 
 import {
+    ShiprocketAssignAwbPayload,
+    ShiprocketAssignAwbResponse,
     ShiprocketCreateOrderPayload,
     ShiprocketCreateOrderResponse,
+    ShiprocketGeneratePickupResponse,
     ShiprocketServiceabilityResponse,
     ShiprocketTrackingResponse,
 } from './types';
@@ -32,6 +35,14 @@ export class ShiprocketClient {
 
     createOrder(payload: ShiprocketCreateOrderPayload): Promise<ShiprocketCreateOrderResponse> {
         return this.request('/orders/create/adhoc', { method: 'POST', body: payload });
+    }
+
+    assignAwb(payload: ShiprocketAssignAwbPayload): Promise<ShiprocketAssignAwbResponse> {
+        return this.request('/courier/assign/awb', { method: 'POST', body: payload });
+    }
+
+    generatePickup(shipmentId: number): Promise<ShiprocketGeneratePickupResponse> {
+        return this.request('/courier/generate/pickup', { method: 'POST', body: { shipment_id: [shipmentId] } });
     }
 
     checkServiceability(params: {

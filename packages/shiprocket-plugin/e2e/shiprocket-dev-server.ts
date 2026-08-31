@@ -28,7 +28,9 @@ void (async () => {
             ShiprocketPlugin.init({
                 email: requireEnv('SHIPROCKET_EMAIL'),
                 password: requireEnv('SHIPROCKET_PASSWORD'),
+                pickupLocation: requireEnv('SHIPROCKET_PICKUP_LOCATION'),
                 channelId: requireEnv('SHIPROCKET_CHANNEL_ID'),
+                pickupPostcode: requireEnv('SHIPROCKET_PICKUP_POSTCODE'),
                 pollIntervalMinutes: 15,
             }),
         ],

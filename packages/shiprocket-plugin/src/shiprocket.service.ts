@@ -13,7 +13,7 @@ import {
     TransactionalConnection,
 } from '@vendure/core';
 
-import { loggerCtx, SHIPROCKET_PLUGIN_OPTIONS } from './constants';
+import { DEFAULT_PARCEL_DIMENSIONS_CM, DEFAULT_UNIT_WEIGHT_KG, loggerCtx, SHIPROCKET_PLUGIN_OPTIONS } from './constants';
 import { ShiprocketClient } from './shiprocket-client';
 import { mapShiprocketStatusToFulfillmentState } from './shiprocket-utils';
 import { ShiprocketPluginOptions } from './types';
@@ -95,10 +95,13 @@ export class ShiprocketService implements OnApplicationBootstrap, OnApplicationS
             };
         });
 
+        const dimensions = this.options.defaultParcelDimensionsCm ?? DEFAULT_PARCEL_DIMENSIONS_CM;
+        const totalUnits = lines.reduce((sum, line) => sum + line.quantity, 0);
+
         const response = await this.client.createOrder({
             order_id: order.code,
             order_date: order.orderPlacedAt?.toISOString() ?? new Date().toISOString(),
-            pickup_location: this.options.channelId,
+            pickup_location: this.options.pickupLocation,
             channel_id: this.options.channelId,
             billing_customer_name: order.shippingAddress?.fullName ?? order.customer?.firstName ?? 'Customer',
             billing_last_name: order.customer?.lastName ?? '',
@@ -113,18 +116,42 @@ export class ShiprocketService implements OnApplicationBootstrap, OnApplicationS
             order_items: orderItems,
             payment_method: 'Prepaid',
             sub_total: order.subTotalWithTax / 100,
-            length: 10,
-            breadth: 10,
-            height: 10,
-            weight: 0.5,
+            length: dimensions.length,
+            breadth: dimensions.breadth,
+            height: dimensions.height,
+            weight: totalUnits * (this.options.defaultUnitWeightKg ?? DEFAULT_UNIT_WEIGHT_KG),
         });
+
+        const awbResult = await this.client.assignAwb({
+            shipment_id: response.shipment_id,
+            ...(this.options.defaultCourierId ? { courier_id: Number(this.options.defaultCourierId) } : {}),
+        });
+        if (awbResult.awb_assign_status !== 1 || !awbResult.response.data.awb_code) {
+            throw new Error(`Shiprocket AWB assignment failed for shipment ${response.shipment_id}`);
+        }
+
+        const manualPickupHint = 'it may need to be scheduled manually from the Shiprocket dashboard';
+        try {
+            const pickupResult = await this.client.generatePickup(response.shipment_id);
+            if (pickupResult.pickup_status !== 1) {
+                Logger.warn(
+                    `Shiprocket pickup generation did not confirm for shipment ${response.shipment_id} - ${manualPickupHint}`,
+                    loggerCtx,
+                );
+            }
+        } catch (e: any) {
+            Logger.warn(
+                `Shiprocket pickup generation failed for shipment ${response.shipment_id}: ${e.message} - ${manualPickupHint}`,
+                loggerCtx,
+            );
+        }
 
         return {
             method: 'Shiprocket',
             customFields: {
                 shiprocketShipmentId: String(response.shipment_id),
-                shiprocketAwbCode: response.awb_code,
-                shiprocketCourierName: response.courier_name,
+                shiprocketAwbCode: awbResult.response.data.awb_code,
+                shiprocketCourierName: awbResult.response.data.courier_name,
             },
         };
     }
@@ -133,10 +160,12 @@ export class ShiprocketService implements OnApplicationBootstrap, OnApplicationS
         if (!order.shippingAddress?.postalCode) {
             return undefined;
         }
+        await this.entityHydrator.hydrate(ctx, order, { relations: ['lines'] });
+        const totalUnits = order.lines.reduce((sum, line) => sum + line.quantity, 0);
         const response = await this.client.checkServiceability({
-            pickup_postcode: this.options.channelId,
+            pickup_postcode: this.options.pickupPostcode,
             delivery_postcode: order.shippingAddress.postalCode,
-            weight: 0.5,
+            weight: totalUnits * (this.options.defaultUnitWeightKg ?? DEFAULT_UNIT_WEIGHT_KG),
             cod: 0,
         });
         const couriers = response.data.available_courier_companies;

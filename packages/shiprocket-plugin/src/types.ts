@@ -29,10 +29,25 @@ export interface ShiprocketPluginOptions {
 
     /**
      * @description
-     * The pickup location postcode registered in your Shiprocket account, used as the origin
-     * for live serviceability/rate checks.
+     * The nickname of the pickup address configured in your Shiprocket account (Settings > Pickup
+     * Addresses). Sent as `pickup_location` when creating orders - Shiprocket resolves the actual
+     * address from this label, so it must match exactly.
+     */
+    pickupLocation: string;
+
+    /**
+     * @description
+     * The numeric sales-channel ID registered in your Shiprocket account (Settings > API > Channel
+     * options), used to attribute orders to this integration.
      */
     channelId: string;
+
+    /**
+     * @description
+     * The postcode of the pickup address above, used as the origin for live serviceability/rate
+     * checks.
+     */
+    pickupPostcode: string;
 
     /**
      * @description
@@ -58,6 +73,29 @@ export interface ShiprocketPluginOptions {
      * @default 15
      */
     pollIntervalMinutes?: number;
+
+    /**
+     * @description
+     * Per-unit weight (in kg) assumed for each item when no better data is available. Multiplied
+     * by the order's total item quantity to estimate parcel weight for rate checks and shipment
+     * creation.
+     *
+     * @default 0.5
+     */
+    defaultUnitWeightKg?: number;
+
+    /**
+     * @description
+     * The parcel dimensions (in cm) sent for shipment creation, since Vendure has no built-in
+     * per-product dimension fields to derive this from.
+     *
+     * @default { length: 10, breadth: 10, height: 10 }
+     */
+    defaultParcelDimensionsCm?: {
+        length: number;
+        breadth: number;
+        height: number;
+    };
 }
 
 export interface ShiprocketCreateOrderPayload {
@@ -88,8 +126,30 @@ export interface ShiprocketCreateOrderResponse {
     order_id: number;
     shipment_id: number;
     status: string;
-    awb_code?: string;
-    courier_name?: string;
+}
+
+export interface ShiprocketAssignAwbPayload {
+    shipment_id: number;
+    courier_id?: number;
+}
+
+export interface ShiprocketAssignAwbResponse {
+    awb_assign_status: number;
+    response: {
+        data: {
+            courier_company_id?: number;
+            awb_code?: string;
+            courier_name?: string;
+        };
+    };
+}
+
+export interface ShiprocketGeneratePickupResponse {
+    pickup_status: number;
+    response?: {
+        pickup_scheduled_date?: string;
+        pickup_token_number?: string;
+    };
 }
 
 export interface ShiprocketServiceabilityResponse {

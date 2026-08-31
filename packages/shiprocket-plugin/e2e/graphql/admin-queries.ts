@@ -35,6 +35,9 @@ export const ADD_FULFILLMENT_TO_ORDER = gql`
                 errorCode
                 message
             }
+            ... on CreateFulfillmentError {
+                fulfillmentHandlerError
+            }
         }
     }
 `;

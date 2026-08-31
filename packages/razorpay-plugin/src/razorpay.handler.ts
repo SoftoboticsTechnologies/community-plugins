@@ -76,10 +76,24 @@ export const razorpayPaymentMethodHandler = new PaymentMethodHandler({
 
     async createRefund(ctx, input, amount, order, payment): Promise<CreateRefundResult> {
         try {
-            const refund = await razorpayService.createRefund(payment.transactionId, amount);
+            const refund = await razorpayService.createRefund(payment.transactionId, amount, {
+                channelToken: ctx.channel.token,
+                orderCode: order.code,
+            });
+            let state: 'Settled' | 'Pending' | 'Failed';
+            if (refund.status === 'processed') {
+                state = 'Settled';
+            } else if (refund.status === 'failed') {
+                state = 'Failed';
+            } else {
+                // 'pending' - Razorpay settles this asynchronously (typically 5-7 days for
+                // normal speed refunds) and notifies via the refund.processed/refund.failed
+                // webhook events, which the controller reconciles against this transactionId.
+                state = 'Pending';
+            }
             return {
-                state: refund.status === 'processed' ? ('Settled' as const) : ('Pending' as const),
-                transactionId: payment.transactionId,
+                state,
+                transactionId: refund.id,
             };
         } catch (e: any) {
             return {

@@ -3,9 +3,11 @@ import crypto from 'crypto';
 
 /**
  * @description
- * Razorpay expects amounts in the smallest currency unit (e.g. paise for INR), and, like Vendure,
- * always uses an integer ×100 convention (Razorpay does not support zero-decimal currencies), so
- * Vendure's `order.totalWithTax` maps directly with no conversion.
+ * Razorpay expects amounts in the smallest currency unit (e.g. paise for INR), which matches
+ * Vendure's internal integer minor-unit representation for `order.totalWithTax`, so no conversion
+ * is needed for INR. Note that Razorpay does have zero-decimal (e.g. JPY) and three-decimal
+ * (e.g. KWD, BHD, OMR) currencies with different minor-unit conventions at its API boundary -
+ * this plugin has not been verified against those currencies.
  */
 export function getAmountInRazorpayMinorUnits(order: Order): number {
     return order.totalWithTax;

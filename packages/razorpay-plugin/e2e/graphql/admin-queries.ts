@@ -23,3 +23,39 @@ export const CREATE_PAYMENT_METHOD = gql`
     }
     ${PAYMENT_METHOD_FRAGMENT}
 `;
+
+export const REFUND_ORDER = gql`
+    mutation RefundOrder($input: RefundOrderInput!) {
+        refundOrder(input: $input) {
+            ... on Refund {
+                id
+                state
+                transactionId
+                total
+            }
+            ... on ErrorResult {
+                errorCode
+                message
+            }
+        }
+    }
+`;
+
+export const GET_ORDER_WITH_REFUNDS = gql`
+    query GetOrderWithRefunds($id: ID!) {
+        order(id: $id) {
+            id
+            code
+            payments {
+                id
+                transactionId
+                refunds {
+                    id
+                    state
+                    transactionId
+                    total
+                }
+            }
+        }
+    }
+`;

@@ -22,7 +22,9 @@ import {
 const SHIPROCKET_API_URL = 'https://apiv2.shiprocket.in';
 const email = 'merchant@example.com';
 const password = 'test-password';
-const channelId = '560001';
+const pickupLocation = 'Primary Warehouse';
+const channelId = '7411979';
+const pickupPostcode = '560001';
 
 function nockAuth() {
     nock(SHIPROCKET_API_URL).post('/v1/external/auth/login').reply(200, { token: 'mock-token' });
@@ -64,7 +66,9 @@ describe('Shiprocket shipping & fulfillment', () => {
                 ShiprocketPlugin.init({
                     email,
                     password,
+                    pickupLocation,
                     channelId,
+                    pickupPostcode,
                     flatRateFallback: 500,
                     pollIntervalMinutes: 60,
                 }),
@@ -166,15 +170,20 @@ describe('Shiprocket shipping & fulfillment', () => {
         });
 
         nockAuth();
+        nock(SHIPROCKET_API_URL).post('/v1/external/orders/create/adhoc').reply(200, {
+            order_id: 900123,
+            shipment_id: 800456,
+            status: 'NEW',
+        });
         nock(SHIPROCKET_API_URL)
-            .post('/v1/external/orders/create/adhoc')
+            .post('/v1/external/courier/assign/awb')
             .reply(200, {
-                order_id: 900123,
-                shipment_id: 800456,
-                status: 'NEW',
-                awb_code: 'AWB123456',
-                courier_name: 'Delhivery',
+                awb_assign_status: 1,
+                response: { data: { courier_company_id: 1, awb_code: 'AWB123456', courier_name: 'Delhivery' } },
             });
+        nock(SHIPROCKET_API_URL)
+            .post('/v1/external/courier/generate/pickup')
+            .reply(200, { pickup_status: 1, response: { pickup_scheduled_date: '2026-01-01 10:00:00' } });
 
         const orderResponse = await adminClient.query(GET_ORDER, { id: activeOrder.id });
         expect(orderResponse.order.state).toBe('PaymentSettled');
@@ -192,5 +201,49 @@ describe('Shiprocket shipping & fulfillment', () => {
         expect(addFulfillmentToOrder.customFields.shiprocketShipmentId).toBe('800456');
         expect(addFulfillmentToOrder.customFields.shiprocketAwbCode).toBe('AWB123456');
         expect(addFulfillmentToOrder.customFields.shiprocketCourierName).toBe('Delhivery');
+    });
+
+    it('fails fulfillment creation when AWB assignment fails', async () => {
+        await shopClient.query(ADD_ITEM_TO_ORDER, { productVariantId: 'T_1', quantity: 1 });
+        await shopClient.query(SET_SHIPPING_ADDRESS, {
+            input: {
+                fullName: 'Test Buyer',
+                streetLine1: '1 Test Street',
+                city: 'Bengaluru',
+                postalCode: '560001',
+                countryCode: 'AT',
+            },
+        });
+        await shopClient.query(SET_SHIPPING_METHOD, { id: [shippingMethodId] });
+        await shopClient.query(TRANSITION_TO_STATE, { state: 'ArrangingPayment' });
+        const { activeOrder } = await shopClient.query(GET_ACTIVE_ORDER);
+        await shopClient.query(ADD_PAYMENT, {
+            input: { method: 'test-payment', metadata: {} },
+        });
+
+        const orderResponse = await adminClient.query(GET_ORDER, { id: activeOrder.id });
+
+        nockAuth();
+        nock(SHIPROCKET_API_URL).post('/v1/external/orders/create/adhoc').reply(200, {
+            order_id: 900124,
+            shipment_id: 800457,
+            status: 'NEW',
+        });
+        nock(SHIPROCKET_API_URL)
+            .post('/v1/external/courier/assign/awb')
+            .reply(200, { awb_assign_status: 0, response: { data: {} } });
+
+        const { addFulfillmentToOrder } = await adminClient.query(ADD_FULFILLMENT_TO_ORDER, {
+            input: {
+                lines: orderResponse.order.lines.map((line: { id: string; quantity: number }) => ({
+                    orderLineId: line.id,
+                    quantity: line.quantity,
+                })),
+                handler: { code: 'shiprocket', arguments: [] },
+            },
+        });
+
+        expect(addFulfillmentToOrder.errorCode).toBe('CREATE_FULFILLMENT_ERROR');
+        expect(addFulfillmentToOrder.fulfillmentHandlerError).toContain('Shiprocket AWB assignment failed');
     });
 });

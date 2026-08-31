@@ -6,6 +6,8 @@ import {
     Logger,
     Order,
     OrderService,
+    Refund,
+    RefundStateTransitionError,
     RequestContextService,
     TransactionalConnection,
 } from '@vendure/core';
@@ -49,6 +51,15 @@ export class RazorpayController {
         }
 
         const event = JSON.parse(request.rawBody.toString());
+
+        if (event.event === 'refund.processed' || event.event === 'refund.failed') {
+            await this.handleRefundEvent(event, request);
+            if (!response.headersSent) {
+                response.status(HttpStatus.OK).send('Ok');
+            }
+            return;
+        }
+
         const payment = event.payload?.payment?.entity;
         const notes = payment?.notes ?? {};
 
@@ -137,9 +148,61 @@ export class RazorpayController {
         }
     }
 
+    /**
+     * Reconciles the terminal state of an asynchronously-processed refund. Razorpay refunds
+     * created at 'normal' speed (the default) return status 'pending' and settle 5-7 days later,
+     * notified via these webhook events - see `razorpay.handler.ts#createRefund`.
+     */
+    private async handleRefundEvent(event: any, request: RequestWithRawBody): Promise<void> {
+        const refund = event.payload?.refund?.entity;
+        const notes = refund?.notes ?? {};
+
+        if (!refund?.id || !notes.channelToken || !notes.orderCode) {
+            return;
+        }
+
+        const ctx = await this.createContext(notes.channelToken, undefined, request);
+
+        await this.connection.withTransaction(ctx, async (transactionCtx: RequestContext) => {
+            const existingRefund = await this.connection
+                .getRepository(transactionCtx, Refund)
+                .findOne({ where: { transactionId: refund.id } });
+
+            if (!existingRefund) {
+                Logger.error(
+                    `Unable to find Refund for Razorpay refund ${refund.id} (order ${notes.orderCode})`,
+                    loggerCtx,
+                );
+                return;
+            }
+
+            if (existingRefund.state !== 'Pending') {
+                // Already reconciled.
+                return;
+            }
+
+            const newState = event.event === 'refund.processed' ? 'Settled' : 'Failed';
+            const result = await this.orderService.transitionRefundToState(
+                transactionCtx,
+                existingRefund.id,
+                newState,
+            );
+
+            if (result instanceof RefundStateTransitionError) {
+                Logger.error(
+                    `Error transitioning refund ${refund.id} to ${newState}: ${result.message}`,
+                    loggerCtx,
+                );
+                return;
+            }
+
+            Logger.info(`Razorpay refund ${refund.id} transitioned to ${newState} via webhook`, loggerCtx);
+        });
+    }
+
     private async createContext(
         channelToken: string,
-        languageCode: LanguageCode,
+        languageCode: LanguageCode | undefined,
         req: RequestWithRawBody,
     ): Promise<RequestContext> {
         return this.requestContextService.create({

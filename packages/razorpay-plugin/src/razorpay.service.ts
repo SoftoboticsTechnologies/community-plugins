@@ -54,6 +54,10 @@ export class RazorpayService {
             currency: order.currencyCode,
             receipt: order.code,
             notes,
+            // This plugin's createPayment handler treats a verified payment as immediately
+            // Settled, so payments must be auto-captured by Razorpay rather than left
+            // authorized-only (manual capture is not implemented by this plugin).
+            payment_capture: true,
         });
 
         return {
@@ -64,9 +68,13 @@ export class RazorpayService {
         };
     }
 
-    async createRefund(paymentId: string, amount: number) {
+    async createRefund(paymentId: string, amount: number, notes?: Record<string, string>) {
         const client = this.getConfiguredClient();
-        return client.instance.payments.refund(paymentId, { amount });
+        return client.instance.payments.refund(paymentId, {
+            amount,
+            notes,
+            speed: this.options.refundSpeed,
+        });
     }
 
     async getRazorpayClient(ctx: RequestContext): Promise<VendureRazorpayClient> {

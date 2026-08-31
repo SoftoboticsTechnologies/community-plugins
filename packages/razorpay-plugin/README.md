@@ -6,8 +6,8 @@ Plugin to enable payments through [Razorpay](https://razorpay.com/docs/) via the
 
 1. You will need a Razorpay account and your Key ID / Key Secret from the dashboard (Settings -> API Keys).
 2. Create a webhook in the Razorpay dashboard (Settings -> Webhooks, "Add New Webhook") which listens to the
-   `payment.captured` and `payment.failed` events. The URL should be `https://my-server.com/payments/razorpay`,
-   where `my-server.com` is the host of your Vendure server.
+   `payment.captured`, `payment.failed`, `refund.processed`, and `refund.failed` events. The URL should be
+   `https://my-server.com/payments/razorpay`, where `my-server.com` is the host of your Vendure server.
 3. Get the webhook secret for the newly created webhook.
 4. Install the plugin and the Razorpay Node library:
 
@@ -67,6 +67,19 @@ Plugin to enable payments through [Razorpay](https://razorpay.com/docs/) via the
 
 The `/payments/razorpay` webhook acts as a reconciliation backstop only — it settles the order if the
 storefront's `addPaymentToOrder` call never completes (e.g. the browser tab closed after payment).
+
+## Refunds
+
+Creating a refund via the Admin UI (or the `refundOrder` mutation) calls the
+[Razorpay Refunds API](https://razorpay.com/docs/api/refunds/create). By default, refunds are processed at
+Razorpay's `'normal'` speed and settle asynchronously (typically 5-7 days later); set the `refundSpeed` plugin
+option to `'optimum'` to let Razorpay attempt an instant refund where supported, falling back to normal
+processing otherwise.
+
+Because a `'normal'`-speed refund is created in a `Pending` state, the plugin registers a custom refund
+process that permits a `Pending -> Pending` self-transition (Vendure's default process only allows
+`Pending -> Settled | Failed`). The `/payments/razorpay` webhook then reconciles the refund to `Settled` or
+`Failed` once Razorpay sends the corresponding `refund.processed`/`refund.failed` event.
 
 ## Local Development
 

@@ -45,6 +45,15 @@ export interface RazorpayPluginOptions {
      * @default false
      */
     storeCustomersInRazorpay?: boolean;
+
+    /**
+     * @description
+     * The speed at which [refunds](https://razorpay.com/docs/api/refunds/create) are processed.
+     * `'optimum'` lets Razorpay attempt an instant refund where supported, falling back to normal
+     * processing (5-7 days) otherwise. If not set, Razorpay's account-level default is used, which
+     * is `'normal'` unless configured otherwise in the Dashboard.
+     */
+    refundSpeed?: 'normal' | 'optimum';
 }
 
 export interface RequestWithRawBody extends Request {

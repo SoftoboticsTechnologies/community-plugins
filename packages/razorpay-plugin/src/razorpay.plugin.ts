@@ -3,6 +3,7 @@ import { gql } from 'graphql-tag';
 
 import { RAZORPAY_PLUGIN_OPTIONS } from './constants';
 import { rawBodyMiddleware } from './raw-body.middleware';
+import { razorpayRefundProcess } from './razorpay-refund-process';
 import { RazorpayController } from './razorpay.controller';
 import { razorpayPaymentMethodHandler } from './razorpay.handler';
 import { RazorpayResolver } from './razorpay.resolver';
@@ -28,6 +29,8 @@ import { RazorpayPluginOptions } from './types';
     ],
     configuration: config => {
         config.paymentOptions.paymentMethodHandlers.push(razorpayPaymentMethodHandler);
+        config.paymentOptions.refundProcess = config.paymentOptions.refundProcess ?? [];
+        config.paymentOptions.refundProcess.push(razorpayRefundProcess);
 
         config.apiOptions.middleware.push({
             route: '/payments/razorpay',
