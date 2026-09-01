@@ -17,57 +17,6 @@ declare module '@vendure/core/dist/entity/custom-entity-fields' {
 export interface ShiprocketPluginOptions {
     /**
      * @description
-     * The email address used to authenticate with the Shiprocket API.
-     */
-    email: string;
-
-    /**
-     * @description
-     * The password used to authenticate with the Shiprocket API.
-     */
-    password: string;
-
-    /**
-     * @description
-     * The nickname of the pickup address configured in your Shiprocket account (Settings > Pickup
-     * Addresses). Sent as `pickup_location` when creating orders - Shiprocket resolves the actual
-     * address from this label, so it must match exactly.
-     */
-    pickupLocation: string;
-
-    /**
-     * @description
-     * The numeric sales-channel ID registered in your Shiprocket account (Settings > API > Channel
-     * options), used to attribute orders to this integration.
-     */
-    channelId: string;
-
-    /**
-     * @description
-     * The postcode of the pickup address above, used as the origin for live serviceability/rate
-     * checks.
-     */
-    pickupPostcode: string;
-
-    /**
-     * @description
-     * If set, restricts live rate lookups and fulfillment creation to this specific courier.
-     * If omitted, the cheapest/first available courier returned by Shiprocket is used.
-     */
-    defaultCourierId?: string;
-
-    /**
-     * @description
-     * The flat-rate shipping price (in the smallest currency unit, e.g. cents) to fall back to
-     * whenever the live Shiprocket serviceability call fails or returns no couriers - this
-     * ensures a rate lookup failure never breaks checkout.
-     *
-     * @default 0
-     */
-    flatRateFallback?: number;
-
-    /**
-     * @description
      * How often (in minutes) to poll Shiprocket for fulfillment status changes.
      *
      * @default 15
@@ -96,6 +45,21 @@ export interface ShiprocketPluginOptions {
         breadth: number;
         height: number;
     };
+}
+
+/**
+ * @description
+ * The Shiprocket account credentials/config resolved from a ShippingMethod's `shiprocket-live-rate`
+ * calculator args - each ShippingMethod (and therefore each Channel it's assigned to) can point at a
+ * different Shiprocket account.
+ */
+export interface ShiprocketAccountArgs {
+    email: string;
+    password: string;
+    pickupLocation: string;
+    channelId: string;
+    pickupPostcode: string;
+    defaultCourierId?: string;
 }
 
 export interface ShiprocketCreateOrderPayload {

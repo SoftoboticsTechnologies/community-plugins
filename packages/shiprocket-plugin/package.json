@@ -1,17 +1,12 @@
 {
-    "name": "@vendure-community/shiprocket-plugin",
-    "version": "1.0.0",
+    "name": "@akshay4362/shiprocket-plugin",
+    "version": "3.0.0",
     "license": "GPL-3.0-or-later",
     "main": "lib/index.js",
     "types": "lib/index.d.ts",
     "files": [
         "lib/**/*"
     ],
-    "repository": {
-        "type": "git",
-        "url": "https://github.com/vendurehq/community-plugins",
-        "directory": "packages/shiprocket-plugin"
-    },
     "private": false,
     "scripts": {
         "watch": "tsc -p ./tsconfig.build.json --watch",
@@ -25,8 +20,7 @@
     "homepage": "https://www.vendure.io/",
     "funding": "https://github.com/sponsors/michaelbromley",
     "publishConfig": {
-        "access": "public",
-        "provenance": true
+        "access": "public"
     },
     "peerDependencies": {
         "@vendure/core": "^3.6.0-0",

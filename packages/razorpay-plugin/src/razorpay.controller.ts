@@ -1,4 +1,4 @@
-import { Controller, Headers, HttpStatus, Inject, Post, Req, Res } from '@nestjs/common';
+import { Controller, Headers, HttpStatus, Post, Req, Res } from '@nestjs/common';
 import type { RequestContext } from '@vendure/core';
 import {
     ChannelService,
@@ -14,18 +14,19 @@ import {
 import { OrderStateTransitionError } from '@vendure/core/dist/common/error/generated-graphql-shop-errors';
 import type { Response } from 'express';
 
-import { loggerCtx, RAZORPAY_PLUGIN_OPTIONS } from './constants';
+import { loggerCtx } from './constants';
 import { computePaymentSignature, verifyWebhookSignature } from './razorpay-utils';
-import { razorpayPaymentMethodHandler } from './razorpay.handler';
-import { RequestWithRawBody, RazorpayPluginOptions } from './types';
+import { RazorpayService } from './razorpay.service';
+import { RequestWithRawBody } from './types';
 
 const missingHeaderErrorMessage = 'Missing X-Razorpay-Signature header';
 const signatureErrorMessage = 'Error verifying Razorpay webhook signature';
+const invalidPayloadErrorMessage = 'Invalid Razorpay webhook payload';
 
 @Controller('payments')
 export class RazorpayController {
     constructor(
-        @Inject(RAZORPAY_PLUGIN_OPTIONS) private options: RazorpayPluginOptions,
+        private razorpayService: RazorpayService,
         private orderService: OrderService,
         private requestContextService: RequestContextService,
         private connection: TransactionalConnection,
@@ -44,29 +45,62 @@ export class RazorpayController {
             return;
         }
 
-        if (!verifyWebhookSignature(request.rawBody, signature, this.options.webhookSecret)) {
+        let event: any;
+        try {
+            event = JSON.parse(request.rawBody.toString());
+        } catch (e) {
+            Logger.error(invalidPayloadErrorMessage, loggerCtx);
+            response.status(HttpStatus.BAD_REQUEST).send(invalidPayloadErrorMessage);
+            return;
+        }
+
+        // Notes are read from the as-yet-unverified payload purely to identify which order/channel
+        // (and therefore which PaymentMethod's webhook secret) this event belongs to. Nothing is
+        // looked up or mutated based on this data until the signature is verified below.
+        const isRefundEvent = event.event === 'refund.processed' || event.event === 'refund.failed';
+        const notes = isRefundEvent ? event.payload?.refund?.entity?.notes : event.payload?.payment?.entity?.notes;
+
+        if (!notes?.channelToken || !notes.orderCode) {
+            response.status(HttpStatus.OK).send('Ok - no Vendure metadata');
+            return;
+        }
+
+        const outerCtx = await this.createContext(notes.channelToken, notes.languageCode as LanguageCode, request);
+        const order = await this.orderService.findOneByCode(outerCtx, notes.orderCode, ['payments']);
+        if (!order) {
+            Logger.error(`Unable to find order ${notes.orderCode} for Razorpay webhook`, loggerCtx);
+            response.status(HttpStatus.BAD_REQUEST).send(`Unknown order ${notes.orderCode}`);
+            return;
+        }
+
+        let resolved;
+        try {
+            resolved = await this.razorpayService.resolveForOrder(outerCtx, order, { requireEligible: false });
+        } catch (e: any) {
+            Logger.error(
+                `Unable to resolve Razorpay payment method for order ${notes.orderCode}: ${e.message}`,
+                loggerCtx,
+            );
+            response.status(HttpStatus.BAD_REQUEST).send(e.message);
+            return;
+        }
+        const { paymentMethod, client } = resolved;
+
+        if (!verifyWebhookSignature(request.rawBody, signature, client.webhookSecret)) {
             Logger.error(`${signatureErrorMessage}: ${signature}`, loggerCtx);
             response.status(HttpStatus.BAD_REQUEST).send(signatureErrorMessage);
             return;
         }
 
-        const event = JSON.parse(request.rawBody.toString());
-
-        if (event.event === 'refund.processed' || event.event === 'refund.failed') {
-            await this.handleRefundEvent(event, request);
+        if (isRefundEvent) {
+            await this.handleRefundEvent(event, outerCtx);
             if (!response.headersSent) {
                 response.status(HttpStatus.OK).send('Ok');
             }
             return;
         }
 
-        const payment = event.payload?.payment?.entity;
-        const notes = payment?.notes ?? {};
-
-        if (!notes.channelToken || !notes.orderCode || !notes.orderId) {
-            response.status(HttpStatus.OK).send('Ok - no Vendure metadata');
-            return;
-        }
+        const payment = event.payload.payment.entity;
 
         if (event.event === 'payment.failed') {
             Logger.warn(`Razorpay payment for order ${notes.orderCode} failed`, loggerCtx);
@@ -80,16 +114,9 @@ export class RazorpayController {
             return;
         }
 
-        const { channelToken, orderCode, orderId, languageCode } = notes;
-        const outerCtx = await this.createContext(channelToken, languageCode as LanguageCode, request);
+        const { orderId, languageCode } = notes;
 
         await this.connection.withTransaction(outerCtx, async (ctx: RequestContext) => {
-            const order = await this.orderService.findOneByCode(ctx, orderCode, ['payments']);
-            if (!order) {
-                Logger.error(`Unable to find order ${orderCode} for Razorpay webhook`, loggerCtx);
-                return;
-            }
-
             const alreadySettled = order.payments?.some(p => p.transactionId === payment.id);
             if (alreadySettled) {
                 // Already settled via the shop-api createRazorpayOrder/addPaymentToOrder flow;
@@ -114,17 +141,17 @@ export class RazorpayController {
                 }
                 if (transitionResult instanceof OrderStateTransitionError) {
                     Logger.error(
-                        `Error transitioning order ${orderCode} to ArrangingPayment: ${transitionResult.message}`,
+                        `Error transitioning order ${notes.orderCode} to ArrangingPayment: ${transitionResult.message}`,
                         loggerCtx,
                     );
                     return;
                 }
             }
 
-            const razorpaySignature = computePaymentSignature(payment.order_id, payment.id, this.options.apiSecret);
+            const razorpaySignature = computePaymentSignature(payment.order_id, payment.id, client.apiSecret);
 
             const addPaymentToOrderResult = await this.orderService.addPaymentToOrder(ctx, orderId, {
-                method: razorpayPaymentMethodHandler.code,
+                method: paymentMethod.code,
                 metadata: {
                     razorpayOrderId: payment.order_id,
                     razorpayPaymentId: payment.id,
@@ -134,13 +161,13 @@ export class RazorpayController {
 
             if (!(addPaymentToOrderResult instanceof Order)) {
                 Logger.error(
-                    `Error adding Razorpay payment to order ${orderCode}: ${addPaymentToOrderResult.message}`,
+                    `Error adding Razorpay payment to order ${notes.orderCode}: ${addPaymentToOrderResult.message}`,
                     loggerCtx,
                 );
                 return;
             }
 
-            Logger.info(`Razorpay payment ${payment.id} added to order ${orderCode} via webhook`, loggerCtx);
+            Logger.info(`Razorpay payment ${payment.id} added to order ${notes.orderCode} via webhook`, loggerCtx);
         });
 
         if (!response.headersSent) {
@@ -153,15 +180,8 @@ export class RazorpayController {
      * created at 'normal' speed (the default) return status 'pending' and settle 5-7 days later,
      * notified via these webhook events - see `razorpay.handler.ts#createRefund`.
      */
-    private async handleRefundEvent(event: any, request: RequestWithRawBody): Promise<void> {
+    private async handleRefundEvent(event: any, ctx: RequestContext): Promise<void> {
         const refund = event.payload?.refund?.entity;
-        const notes = refund?.notes ?? {};
-
-        if (!refund?.id || !notes.channelToken || !notes.orderCode) {
-            return;
-        }
-
-        const ctx = await this.createContext(notes.channelToken, undefined, request);
 
         await this.connection.withTransaction(ctx, async (transactionCtx: RequestContext) => {
             const existingRefund = await this.connection
@@ -169,10 +189,7 @@ export class RazorpayController {
                 .findOne({ where: { transactionId: refund.id } });
 
             if (!existingRefund) {
-                Logger.error(
-                    `Unable to find Refund for Razorpay refund ${refund.id} (order ${notes.orderCode})`,
-                    loggerCtx,
-                );
+                Logger.error(`Unable to find Refund for Razorpay refund ${refund.id}`, loggerCtx);
                 return;
             }
 
@@ -189,10 +206,7 @@ export class RazorpayController {
             );
 
             if (result instanceof RefundStateTransitionError) {
-                Logger.error(
-                    `Error transitioning refund ${refund.id} to ${newState}: ${result.message}`,
-                    loggerCtx,
-                );
+                Logger.error(`Error transitioning refund ${refund.id} to ${newState}: ${result.message}`, loggerCtx);
                 return;
             }
 

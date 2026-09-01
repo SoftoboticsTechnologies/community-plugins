@@ -25,15 +25,15 @@ Plugin to enable payments through [Razorpay](https://razorpay.com/docs/) via the
 
     plugins: [
       RazorpayPlugin.init({
-        apiKey: process.env.RAZORPAY_KEY_ID!,
-        apiSecret: process.env.RAZORPAY_KEY_SECRET!,
-        webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET!,
+        // optional: see the RazorpayPluginOptions type for storeCustomersInRazorpay / refundSpeed
       }),
     ]
     ```
-    For all the plugin options, see the `RazorpayPluginOptions` type.
 2. Create a new PaymentMethod in the Admin UI, and select "Razorpay payments" as the handler.
-3. Set the "Key Secret" argument on the PaymentMethod form (this must match the `apiSecret` plugin option).
+3. Set the "Key ID", "Key Secret", and "Webhook Secret" arguments on the PaymentMethod form. Each
+   PaymentMethod using the Razorpay handler can be configured with its own Razorpay account, so
+   different channels/PaymentMethods can point at different accounts. Only one enabled PaymentMethod
+   using the Razorpay handler is supported per channel at a time.
 
 ## Storefront Usage
 
@@ -83,8 +83,8 @@ process that permits a `Pending -> Pending` self-transition (Vendure's default p
 
 ## Local Development
 
-Set `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, and `RAZORPAY_WEBHOOK_SECRET` in a `.env` file in this package,
-then run:
+Set `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, and `RAZORPAY_WEBHOOK_SECRET` in a `.env` file in this package
+(these seed the dev-server's Razorpay PaymentMethod handler arguments, not `RazorpayPlugin.init()`), then run:
 
 ```shell
 npm run dev-server

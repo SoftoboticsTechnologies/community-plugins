@@ -18,25 +18,6 @@ declare module '@vendure/core/dist/entity/custom-entity-fields' {
 export interface RazorpayPluginOptions {
     /**
      * @description
-     * The Razorpay Key ID, from the Razorpay dashboard (Settings -> API Keys).
-     */
-    apiKey: string;
-
-    /**
-     * @description
-     * The Razorpay Key Secret, from the Razorpay dashboard (Settings -> API Keys).
-     */
-    apiSecret: string;
-
-    /**
-     * @description
-     * The webhook signing secret configured in the Razorpay dashboard (Settings -> Webhooks),
-     * used to verify the authenticity of the `/payments/razorpay` webhook backstop.
-     */
-    webhookSecret: string;
-
-    /**
-     * @description
      * If set to `true`, a [Customer](https://razorpay.com/docs/api/customers) object will be created in
      * Razorpay - if it doesn't already exist - for authenticated users. This is done by adding a custom
      * field to the Customer entity to store the Razorpay customer ID, so switching this on will require

@@ -21,13 +21,35 @@ export const razorpayPaymentMethodHandler = new PaymentMethodHandler({
     description: [{ languageCode: LanguageCode.en, value: 'Razorpay payments' }],
 
     args: {
+        apiKey: {
+            type: 'string',
+            label: [{ languageCode: LanguageCode.en, value: 'Key ID' }],
+            description: [
+                {
+                    languageCode: LanguageCode.en,
+                    value: 'The Razorpay Key ID, from the Razorpay dashboard (Settings -> API Keys).',
+                },
+            ],
+            ui: { component: 'password-form-input' },
+        },
         apiSecret: {
             type: 'string',
             label: [{ languageCode: LanguageCode.en, value: 'Key Secret' }],
             description: [
                 {
                     languageCode: LanguageCode.en,
-                    value: 'Used to verify the Razorpay payment signature. Must match the plugin-level apiSecret option.',
+                    value: 'The Razorpay Key Secret, from the Razorpay dashboard (Settings -> API Keys). Used to verify the Razorpay payment signature.',
+                },
+            ],
+            ui: { component: 'password-form-input' },
+        },
+        webhookSecret: {
+            type: 'string',
+            label: [{ languageCode: LanguageCode.en, value: 'Webhook Secret' }],
+            description: [
+                {
+                    languageCode: LanguageCode.en,
+                    value: 'The webhook signing secret configured in the Razorpay dashboard (Settings -> Webhooks), used to verify webhook authenticity.',
                 },
             ],
             ui: { component: 'password-form-input' },
@@ -74,12 +96,18 @@ export const razorpayPaymentMethodHandler = new PaymentMethodHandler({
         };
     },
 
-    async createRefund(ctx, input, amount, order, payment): Promise<CreateRefundResult> {
+    async createRefund(ctx, input, amount, order, payment, args): Promise<CreateRefundResult> {
         try {
-            const refund = await razorpayService.createRefund(payment.transactionId, amount, {
-                channelToken: ctx.channel.token,
-                orderCode: order.code,
-            });
+            const refund = await razorpayService.createRefund(
+                args.apiKey,
+                args.apiSecret,
+                payment.transactionId,
+                amount,
+                {
+                    channelToken: ctx.channel.token,
+                    orderCode: order.code,
+                },
+            );
             let state: 'Settled' | 'Pending' | 'Failed';
             if (refund.status === 'processed') {
                 state = 'Settled';

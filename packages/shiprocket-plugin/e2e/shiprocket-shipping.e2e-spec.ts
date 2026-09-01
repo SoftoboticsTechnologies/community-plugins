@@ -64,12 +64,6 @@ describe('Shiprocket shipping & fulfillment', () => {
             },
             plugins: [
                 ShiprocketPlugin.init({
-                    email,
-                    password,
-                    pickupLocation,
-                    channelId,
-                    pickupPostcode,
-                    flatRateFallback: 500,
                     pollIntervalMinutes: 60,
                 }),
             ],
@@ -95,6 +89,11 @@ describe('Shiprocket shipping & fulfillment', () => {
                 calculator: {
                     code: 'shiprocket-live-rate',
                     arguments: [
+                        { name: 'email', value: email },
+                        { name: 'password', value: password },
+                        { name: 'pickupLocation', value: pickupLocation },
+                        { name: 'channelId', value: channelId },
+                        { name: 'pickupPostcode', value: pickupPostcode },
                         { name: 'flatRateFallback', value: '500' },
                         { name: 'taxRate', value: '0' },
                     ],
@@ -159,6 +158,60 @@ describe('Shiprocket shipping & fulfillment', () => {
         const { eligibleShippingMethods } = await shopClient.query(GET_ELIGIBLE_SHIPPING_METHODS);
         const shiprocketMethod = eligibleShippingMethods.find((m: any) => m.name === 'Shiprocket');
         expect(shiprocketMethod.price).toBe(6000);
+    });
+
+    it('resolves credentials independently per ShippingMethod (different Shiprocket accounts per channel)', async () => {
+        const secondEmail = 'other-merchant@example.com';
+        const secondPassword = 'other-password';
+
+        await adminClient.query(CREATE_SHIPPING_METHOD, {
+            input: {
+                code: 'shiprocket-shipping-second-account',
+                translations: [{ languageCode: 'en', name: 'Shiprocket Second Account', description: '' }],
+                fulfillmentHandler: 'shiprocket',
+                checker: { code: 'default-shipping-eligibility-checker', arguments: [{ name: 'orderMinimum', value: '0' }] },
+                calculator: {
+                    code: 'shiprocket-live-rate',
+                    arguments: [
+                        { name: 'email', value: secondEmail },
+                        { name: 'password', value: secondPassword },
+                        { name: 'pickupLocation', value: 'Second Warehouse' },
+                        { name: 'channelId', value: '1234567' },
+                        { name: 'pickupPostcode', value: '110001' },
+                        { name: 'flatRateFallback', value: '700' },
+                        { name: 'taxRate', value: '0' },
+                    ],
+                },
+            },
+        });
+
+        nock(SHIPROCKET_API_URL)
+            .post('/v1/external/auth/login', body => body.email === email)
+            .reply(200, { token: 'mock-token-account-one' });
+        nock(SHIPROCKET_API_URL)
+            .post('/v1/external/auth/login', body => body.email === secondEmail)
+            .reply(200, { token: 'mock-token-account-two' });
+        nock(SHIPROCKET_API_URL)
+            .get('/v1/external/courier/serviceability')
+            .query(actual => actual.pickup_postcode === pickupPostcode)
+            .reply(200, {
+                data: { available_courier_companies: [{ courier_company_id: 1, courier_name: 'Delhivery', rate: 60 }] },
+            });
+        nock(SHIPROCKET_API_URL)
+            .get('/v1/external/courier/serviceability')
+            .query(actual => actual.pickup_postcode === '110001')
+            .reply(200, {
+                data: { available_courier_companies: [{ courier_company_id: 2, courier_name: 'BlueDart', rate: 90 }] },
+            });
+
+        const { eligibleShippingMethods } = await shopClient.query(GET_ELIGIBLE_SHIPPING_METHODS);
+        const firstAccountMethod = eligibleShippingMethods.find((m: any) => m.name === 'Shiprocket');
+        const secondAccountMethod = eligibleShippingMethods.find((m: any) => m.name === 'Shiprocket Second Account');
+
+        expect(firstAccountMethod).toBeDefined();
+        expect(secondAccountMethod).toBeDefined();
+        expect(firstAccountMethod.price).toBe(6000);
+        expect(secondAccountMethod.price).toBe(9000);
     });
 
     it('creates a Shiprocket shipment on fulfillment', async () => {

@@ -36,11 +36,7 @@ describe('Razorpay payments', () => {
     beforeAll(async () => {
         const devConfig = mergeConfig(testConfig(), {
             plugins: [
-                RazorpayPlugin.init({
-                    apiKey,
-                    apiSecret,
-                    webhookSecret,
-                }),
+                RazorpayPlugin.init({}),
             ],
         });
         serverPort = devConfig.apiOptions.port;
@@ -65,7 +61,11 @@ describe('Razorpay payments', () => {
                 ],
                 handler: {
                     code: 'razorpay',
-                    arguments: [{ name: 'apiSecret', value: apiSecret }],
+                    arguments: [
+                        { name: 'apiKey', value: apiKey },
+                        { name: 'apiSecret', value: apiSecret },
+                        { name: 'webhookSecret', value: webhookSecret },
+                    ],
                 },
             },
         });

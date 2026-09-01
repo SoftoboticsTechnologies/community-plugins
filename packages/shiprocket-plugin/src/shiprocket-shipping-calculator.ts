@@ -11,6 +11,51 @@ export const shiprocketShippingCalculator = new ShippingCalculator({
     description: [{ languageCode: LanguageCode.en, value: 'Shiprocket live shipping rate' }],
 
     args: {
+        email: {
+            type: 'string',
+            ui: { component: 'password-form-input' },
+            label: [{ languageCode: LanguageCode.en, value: 'Shiprocket email' }],
+        },
+        password: {
+            type: 'string',
+            ui: { component: 'password-form-input' },
+            label: [{ languageCode: LanguageCode.en, value: 'Shiprocket password' }],
+        },
+        pickupLocation: {
+            type: 'string',
+            label: [{ languageCode: LanguageCode.en, value: 'Pickup location' }],
+            description: [
+                {
+                    languageCode: LanguageCode.en,
+                    value: 'The nickname of the pickup address configured in Shiprocket (Settings > Pickup Addresses)',
+                },
+            ],
+        },
+        channelId: {
+            type: 'string',
+            label: [{ languageCode: LanguageCode.en, value: 'Shiprocket channel ID' }],
+            description: [
+                {
+                    languageCode: LanguageCode.en,
+                    value: 'The sales-channel ID registered in Shiprocket (Settings > API > Channel options)',
+                },
+            ],
+        },
+        pickupPostcode: {
+            type: 'string',
+            label: [{ languageCode: LanguageCode.en, value: 'Pickup postcode' }],
+        },
+        defaultCourierId: {
+            type: 'string',
+            required: false,
+            label: [{ languageCode: LanguageCode.en, value: 'Default courier ID' }],
+            description: [
+                {
+                    languageCode: LanguageCode.en,
+                    value: 'If set, restricts live rate lookups and fulfillment creation to this courier',
+                },
+            ],
+        },
         flatRateFallback: {
             type: 'int',
             ui: { component: 'currency-form-input' },
@@ -29,7 +74,7 @@ export const shiprocketShippingCalculator = new ShippingCalculator({
 
     async calculate(ctx, order, args) {
         try {
-            const rate = await shiprocketService.getLiveRate(ctx, order);
+            const rate = await shiprocketService.getLiveRate(ctx, order, args);
             if (rate != null) {
                 return {
                     price: rate,

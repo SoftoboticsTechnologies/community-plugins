@@ -24,19 +24,18 @@ Plugin to enable shipping rate calculation and order fulfillment through [Shipro
 
     plugins: [
       ShiprocketPlugin.init({
-        email: process.env.SHIPROCKET_EMAIL!,
-        password: process.env.SHIPROCKET_PASSWORD!,
-        pickupLocation: process.env.SHIPROCKET_PICKUP_LOCATION!,
-        channelId: process.env.SHIPROCKET_CHANNEL_ID!,
-        pickupPostcode: process.env.SHIPROCKET_PICKUP_POSTCODE!,
-        flatRateFallback: 500, // 5.00 in the store's currency, used if live rates fail
         pollIntervalMinutes: 15, // how often to check Shiprocket for status changes
       }),
     ]
     ```
     For all the plugin options, see the `ShiprocketPluginOptions` type.
 2. Create a new ShippingMethod in the Admin UI:
-   - Calculator: "Shiprocket live shipping rate" (`shiprocket-live-rate`)
+   - Calculator: "Shiprocket live shipping rate" (`shiprocket-live-rate`) - fill in its arguments
+     with the Shiprocket account to use for this method: `email`, `password`, `pickupLocation`,
+     `channelId`, `pickupPostcode`, and optionally `defaultCourierId`, plus `flatRateFallback` and
+     `taxRate`. Since these credentials live on the ShippingMethod (which is assignable to specific
+     channels), different ShippingMethods - and therefore different channels - can point at
+     different Shiprocket accounts.
    - Fulfillment handler: "Ship via Shiprocket" (`shiprocket`)
 
 ## Storefront Usage
@@ -100,7 +99,8 @@ status. Failures are logged and retried on the next cycle.
 ## Local Development
 
 Set `SHIPROCKET_EMAIL`, `SHIPROCKET_PASSWORD`, `SHIPROCKET_PICKUP_LOCATION`, `SHIPROCKET_CHANNEL_ID`,
-and `SHIPROCKET_PICKUP_POSTCODE` in a `.env` file in this package, then run:
+and `SHIPROCKET_PICKUP_POSTCODE` in a `.env` file in this package (these seed the calculator
+arguments of a ShippingMethod created automatically by the dev server), then run:
 
 ```shell
 npm run dev-server

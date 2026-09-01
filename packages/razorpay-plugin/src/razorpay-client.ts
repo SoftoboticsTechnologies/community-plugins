@@ -8,9 +8,9 @@ export class VendureRazorpayClient {
     readonly instance: Razorpay;
 
     constructor(
-        private apiKey: string,
+        public apiKey: string,
         public apiSecret: string,
-        public webhookSecret: string,
+        public webhookSecret: string = '',
     ) {
         this.instance = new Razorpay({ key_id: apiKey, key_secret: apiSecret });
     }

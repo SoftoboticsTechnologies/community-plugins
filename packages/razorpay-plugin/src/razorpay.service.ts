@@ -3,6 +3,7 @@ import { ConfigArg } from '@vendure/common/lib/generated-types';
 import {
     Customer,
     Order,
+    PaymentMethod,
     PaymentMethodService,
     RequestContext,
     TransactionalConnection,
@@ -23,6 +24,11 @@ export interface RazorpayOrderResult {
     keyId: string;
 }
 
+export interface ResolvedRazorpayPaymentMethod {
+    paymentMethod: PaymentMethod;
+    client: VendureRazorpayClient;
+}
+
 @Injectable()
 export class RazorpayService {
     constructor(
@@ -32,7 +38,7 @@ export class RazorpayService {
     ) {}
 
     async createOrder(ctx: RequestContext, order: Order): Promise<RazorpayOrderResult> {
-        const client = await this.getRazorpayClient(ctx);
+        const { client } = await this.resolveForOrder(ctx, order);
         const amount = getAmountInRazorpayMinorUnits(order);
 
         let notes: Record<string, string> = {
@@ -64,12 +70,18 @@ export class RazorpayService {
             orderId: razorpayOrder.id,
             amount,
             currency: order.currencyCode,
-            keyId: this.options.apiKey,
+            keyId: client.apiKey,
         };
     }
 
-    async createRefund(paymentId: string, amount: number, notes?: Record<string, string>) {
-        const client = this.getConfiguredClient();
+    async createRefund(
+        apiKey: string,
+        apiSecret: string,
+        paymentId: string,
+        amount: number,
+        notes?: Record<string, string>,
+    ) {
+        const client = new VendureRazorpayClient(apiKey, apiSecret);
         return client.instance.payments.refund(paymentId, {
             amount,
             notes,
@@ -77,29 +89,56 @@ export class RazorpayService {
         });
     }
 
-    async getRazorpayClient(ctx: RequestContext): Promise<VendureRazorpayClient> {
-        await this.assertEnabledPaymentMethod(ctx);
-        return this.getConfiguredClient();
-    }
-
     /**
-     * The plugin is configured with a single, global API key/secret pair (unlike stripe-plugin,
-     * which reads per-PaymentMethod handler args) — see `RazorpayPluginOptions`. This keeps the
-     * webhook controller (which has no RequestContext-scoped PaymentMethod to read args from) able
-     * to construct the same client without duplicating credential storage.
+     * Resolves the enabled Razorpay-handler PaymentMethod for the given order and builds a client
+     * from its per-instance `apiKey`/`apiSecret`/`webhookSecret` handler args, mirroring
+     * `stripe-plugin`'s `StripeService.getStripeClient`. Each PaymentMethod using the `razorpay`
+     * handler can therefore point at a different Razorpay account.
+     *
+     * By default this also requires the method to be currently *eligible* for the order (e.g. via
+     * a configured PaymentMethodEligibilityChecker) - appropriate when about to create a new
+     * Razorpay order/payment. Pass `requireEligible: false` when reconciling a payment/refund that
+     * already happened (e.g. from the webhook), since eligibility (amount/currency/country, etc.)
+     * can legitimately no longer hold for an existing order and must not block reconciliation.
      */
-    private getConfiguredClient(): VendureRazorpayClient {
-        return new VendureRazorpayClient(this.options.apiKey, this.options.apiSecret, this.options.webhookSecret);
-    }
-
-    private async assertEnabledPaymentMethod(ctx: RequestContext): Promise<void> {
-        const paymentMethods = await this.paymentMethodService.findAll(ctx, {
-            filter: { enabled: { eq: true } },
-        });
-        const method = paymentMethods.items.find(pm => pm.handler.code === razorpayPaymentMethodHandler.code);
-        if (!method) {
+    async resolveForOrder(
+        ctx: RequestContext,
+        order: Order,
+        { requireEligible = true }: { requireEligible?: boolean } = {},
+    ): Promise<ResolvedRazorpayPaymentMethod> {
+        const [eligiblePaymentMethods, enabledPaymentMethods] = await Promise.all([
+            requireEligible ? this.paymentMethodService.getEligiblePaymentMethods(ctx, order) : undefined,
+            this.paymentMethodService.findAll(ctx, { filter: { enabled: { eq: true } } }),
+        ]);
+        const paymentMethod = enabledPaymentMethods.items.find(
+            pm => pm.handler.code === razorpayPaymentMethodHandler.code,
+        );
+        if (!paymentMethod) {
             throw new UserInputError('No enabled Razorpay payment method found');
         }
+        if (eligiblePaymentMethods) {
+            const isEligible = eligiblePaymentMethods.some(pm => pm.code === paymentMethod.code);
+            if (!isEligible) {
+                throw new UserInputError(`Razorpay payment method is not eligible for order ${order.code}`);
+            }
+        }
+
+        const apiKey = this.findArgValue(paymentMethod.handler.args, 'apiKey');
+        const apiSecret = this.findArgValue(paymentMethod.handler.args, 'apiSecret');
+        const webhookSecret = this.findArgValue(paymentMethod.handler.args, 'webhookSecret');
+
+        return {
+            paymentMethod,
+            client: new VendureRazorpayClient(apiKey, apiSecret, webhookSecret),
+        };
+    }
+
+    private findArgValue(args: ConfigArg[], name: string): string {
+        const value = args.find(arg => arg.name === name)?.value;
+        if (!value) {
+            throw new UserInputError(`No '${name}' argument configured on the Razorpay payment method`);
+        }
+        return value;
     }
 
     private async getRazorpayCustomerId(

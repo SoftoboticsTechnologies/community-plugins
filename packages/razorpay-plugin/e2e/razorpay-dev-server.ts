@@ -31,14 +31,20 @@ void (async () => {
                 route: 'admin',
                 port: 5001,
             }),
-            RazorpayPlugin.init({
-                apiKey: requireEnv('RAZORPAY_KEY_ID'),
-                apiSecret: requireEnv('RAZORPAY_KEY_SECRET'),
-                webhookSecret: requireEnv('RAZORPAY_WEBHOOK_SECRET'),
-            }),
+            RazorpayPlugin.init({}),
         ],
         logger: new DefaultLogger({ level: LogLevel.Debug }),
     });
+    // The default e2e testConfig sets `cors: true` (a boolean), which does not expose the
+    // `vendure-auth-token` response header to browser JS and only reflects the request origin
+    // without allowing arbitrary local test pages. Override with an explicit CORS config so the
+    // static checkout-test.html page (served from a different origin) can read the bearer token.
+    config.apiOptions.cors = {
+        origin: true,
+        credentials: true,
+        exposedHeaders: ['vendure-auth-token'],
+    };
+
     const { server, shopClient, adminClient } = createTestEnvironment(config);
     await server.init({
         initialData,
@@ -56,7 +62,11 @@ void (async () => {
             ],
             handler: {
                 code: 'razorpay',
-                arguments: [{ name: 'apiSecret', value: requireEnv('RAZORPAY_KEY_SECRET') }],
+                arguments: [
+                    { name: 'apiKey', value: requireEnv('RAZORPAY_KEY_ID') },
+                    { name: 'apiSecret', value: requireEnv('RAZORPAY_KEY_SECRET') },
+                    { name: 'webhookSecret', value: requireEnv('RAZORPAY_WEBHOOK_SECRET') },
+                ],
             },
         },
     });
@@ -67,5 +77,11 @@ void (async () => {
     const { createRazorpayOrder } = await shopClient.query(CREATE_RAZORPAY_ORDER);
 
     Logger.info(`Razorpay order created: ${JSON.stringify(createRazorpayOrder)}`, loggerCtx);
-    Logger.info('http://localhost:3050/checkout', loggerCtx);
+    Logger.info('Shop API: http://localhost:3050/shop-api', loggerCtx);
+    Logger.info('Admin UI: http://localhost:5001/admin', loggerCtx);
+    Logger.info(
+        'There is no bundled storefront. To manually test a real Razorpay payment end-to-end, serve ' +
+            'e2e/checkout-test.html (e.g. `npx serve e2e -l 4000`) and open it in a browser.',
+        loggerCtx,
+    );
 })();
