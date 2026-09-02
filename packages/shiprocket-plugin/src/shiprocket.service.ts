@@ -21,10 +21,12 @@ import { ShiprocketAccountArgs, ShiprocketPluginOptions } from './types';
 
 export interface ShiprocketFulfillmentResult {
     method: string;
+    trackingCode?: string;
     customFields: {
         shiprocketShipmentId: string;
         shiprocketAwbCode?: string;
         shiprocketCourierName?: string;
+        shiprocketOrderId?: string;
     };
 }
 
@@ -94,11 +96,18 @@ export class ShiprocketService implements OnApplicationBootstrap, OnApplicationS
             if (!orderLine) {
                 throw new Error(`OrderLine ${lineInput.orderLineId} not found on order ${order.code}`);
             }
+            const hsnCode = orderLine.productVariant.customFields?.hsnCode;
+            if (!hsnCode) {
+                throw new Error(
+                    `Product ${orderLine.productVariant.sku} is missing an HSN code required for Shiprocket shipment creation`,
+                );
+            }
             return {
                 name: orderLine.productVariant.name,
                 sku: orderLine.productVariant.sku,
                 units: lineInput.quantity,
                 selling_price: orderLine.proratedUnitPriceWithTax / 100,
+                hsn: hsnCode,
             };
         });
 
@@ -155,10 +164,12 @@ export class ShiprocketService implements OnApplicationBootstrap, OnApplicationS
 
         return {
             method: 'Shiprocket',
+            trackingCode: awbResult.response.data.awb_code,
             customFields: {
                 shiprocketShipmentId: String(response.shipment_id),
                 shiprocketAwbCode: awbResult.response.data.awb_code,
                 shiprocketCourierName: awbResult.response.data.courier_name,
+                shiprocketOrderId: String(response.order_id),
             },
         };
     }
@@ -253,10 +264,32 @@ export class ShiprocketService implements OnApplicationBootstrap, OnApplicationS
             try {
                 const client = this.getClient(accountArgs.email, accountArgs.password);
                 const tracking = await client.trackShipment(shipmentId);
-                const nextState = mapShiprocketStatusToFulfillmentState(
-                    tracking.tracking_data.shipment_status,
-                    fulfillment.state,
+                const activities = tracking.tracking_data.shipment_track_activities ?? [];
+                const latestActivity = activities.reduce<(typeof activities)[number] | undefined>(
+                    (latest, activity) =>
+                        !latest || new Date(activity.date).getTime() > new Date(latest.date).getTime()
+                            ? activity
+                            : latest,
+                    undefined,
                 );
+                const statusLabel = latestActivity?.['sr-status-label'] || latestActivity?.status;
+                if (!statusLabel) {
+                    Logger.warn(
+                        `No tracking activity found for fulfillment ${fulfillment.id}; skipping status sync`,
+                        loggerCtx,
+                    );
+                    continue;
+                }
+                if (fulfillment.customFields?.shiprocketStatus !== statusLabel) {
+                    await this.connection
+                        .getRepository(ctx, Fulfillment)
+                        .update(fulfillment.id, { customFields: { shiprocketStatus: statusLabel } });
+                    Logger.info(
+                        `Fulfillment ${fulfillment.id} Shiprocket status updated to "${statusLabel}"`,
+                        loggerCtx,
+                    );
+                }
+                const nextState = mapShiprocketStatusToFulfillmentState(statusLabel, fulfillment.state);
                 if (!nextState) {
                     continue;
                 }

@@ -8,7 +8,15 @@ Plugin to enable shipping rate calculation and order fulfillment through [Shipro
 2. A pickup address configured in your Shiprocket account (Settings > Pickup Addresses) - note its
    nickname (`pickupLocation`) and postcode (`pickupPostcode`).
 3. A sales channel ID for this integration, from Settings > API > Channel options (`channelId`).
-4. Install the plugin:
+4. A `hsnCode` custom field on `ProductVariant`, added in your `VendureConfig`:
+    ```ts
+    customFields: {
+      ProductVariant: [{ name: 'hsnCode', type: 'string', nullable: true }],
+    }
+    ```
+   Shiprocket requires an HSN code per order item - shipment creation throws if a variant being
+   shipped has no `hsnCode` set. Fill this in per variant in the Admin UI (Catalog > Product Variants).
+5. Install the plugin:
 
     ```shell
     npm install @vendure-community/shiprocket-plugin
@@ -75,7 +83,8 @@ standard shipping-method APIs, no Shiprocket-specific queries or mutations are r
 
 When an order is fulfilled via the "Ship via Shiprocket" handler, the plugin:
 
-1. Creates the shipment in Shiprocket.
+1. Creates the shipment in Shiprocket, sending each order item's `hsnCode` custom field as its HSN.
+   Fulfillment creation throws if any shipped variant is missing an `hsnCode`.
 2. Assigns a courier and generates an AWB code, restricted to `defaultCourierId` if one is
    configured, or Shiprocket's recommended courier otherwise. This step is required to succeed -
    fulfillment creation fails if no courier can be assigned, so a shipment is never left stuck

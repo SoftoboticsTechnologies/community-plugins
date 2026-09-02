@@ -1,6 +1,7 @@
 /**
  * @description
- * Maps a free-text Shiprocket `shipment_status` string onto the next Fulfillment state to
+ * Maps a free-text Shiprocket tracking status label (e.g. a `sr-status-label` from
+ * `shipment_track_activities`) onto the next Fulfillment state to
  * transition to, or `undefined` if there's nothing to do. Vendure's default Fulfillment state
  * machine only allows `Pending -> Shipped -> Delivered` (plus `Cancelled` from either), so this
  * only ever proposes the single next step - it does not try to skip states.

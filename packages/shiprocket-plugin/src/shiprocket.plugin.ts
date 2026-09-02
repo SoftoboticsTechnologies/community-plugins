@@ -52,6 +52,22 @@ import { ShiprocketPluginOptions } from './types';
                 public: true,
                 readonly: true,
             },
+            {
+                name: 'shiprocketOrderId',
+                type: 'string',
+                label: [{ languageCode: LanguageCode.en, value: 'Shiprocket Order ID' }],
+                nullable: true,
+                public: false,
+                readonly: true,
+            },
+            {
+                name: 'shiprocketStatus',
+                type: 'string',
+                label: [{ languageCode: LanguageCode.en, value: 'Shiprocket Status' }],
+                nullable: true,
+                public: true,
+                readonly: true,
+            },
         );
 
         return config;

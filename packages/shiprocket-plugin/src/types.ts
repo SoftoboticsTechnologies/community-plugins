@@ -5,6 +5,11 @@ declare module '@vendure/core/dist/entity/custom-entity-fields' {
         shiprocketShipmentId?: string;
         shiprocketAwbCode?: string;
         shiprocketCourierName?: string;
+        shiprocketOrderId?: string;
+        shiprocketStatus?: string;
+    }
+    interface CustomProductVariantFields {
+        hsnCode?: string;
     }
 }
 
@@ -77,7 +82,7 @@ export interface ShiprocketCreateOrderPayload {
     billing_email: string;
     billing_phone: string;
     shipping_is_billing: boolean;
-    order_items: Array<{ name: string; sku: string; units: number; selling_price: number }>;
+    order_items: Array<{ name: string; sku: string; units: number; selling_price: number; hsn?: string }>;
     payment_method: 'Prepaid' | 'COD';
     sub_total: number;
     length: number;
@@ -122,8 +127,20 @@ export interface ShiprocketServiceabilityResponse {
     };
 }
 
+export interface ShiprocketTrackingActivity {
+    date: string;
+    status: string;
+    activity: string;
+    location: string;
+    'sr-status': string;
+    'sr-status-label': string;
+}
+
 export interface ShiprocketTrackingResponse {
     tracking_data: {
-        shipment_status: string;
+        // Numeric status code, not a human-readable string - see `shipment_track_activities`
+        // for the text label of the most recent tracking event.
+        shipment_status: number;
+        shipment_track_activities?: ShiprocketTrackingActivity[];
     };
 }
