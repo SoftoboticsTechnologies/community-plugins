@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Cashfree plugin - manual checkout test</title>
+<script src="https://sdk.cashfree.com/js/v3/cashfree.js"></script>
+<style>
+    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; }
+    button { display: block; width: 100%; padding: 10px; margin: 8px 0; font-size: 15px; cursor: pointer; }
+    pre { background: #f4f4f4; padding: 12px; overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
+    .step { color: #666; font-size: 13px; margin-top: 2px; }
+    #log { margin-top: 20px; }
+    .entry { border-left: 3px solid #ccc; padding-left: 10px; margin-bottom: 10px; }
+    .entry.error { border-color: #c0392b; }
+    .entry.ok { border-color: #27ae60; }
+</style>
+</head>
+<body>
+<h1>Cashfree plugin - manual checkout test</h1>
+<p>
+    Talks directly to the dev-server's Shop API at <code>http://localhost:3050/shop-api</code>.
+    Runs the full order flow (login &rarr; add item &rarr; shipping &rarr; ArrangingPayment &rarr;
+    createCashfreeOrder), opens the real Cashfree Checkout modal, then confirms the payment via
+    <code>addPaymentToOrder</code> (the plugin independently verifies settlement against the Cashfree API
+    server-side rather than trusting this client-side result).
+</p>
+
+<label>
+    Shop API URL
+    <input id="apiUrl" type="text" value="http://localhost:3050/shop-api" style="width:100%" />
+</label>
+<label>
+    Payment method code
+    <input id="methodCode" type="text" value="cashfree-payment-method" style="width:100%" />
+</label>
+<label>
+    Product variant ID (leave blank to auto-pick the first available product)
+    <input id="variantId" type="text" value="" style="width:100%" />
+</label>
+
+<button id="runBtn">1. Build order &amp; open Cashfree Checkout</button>
+<div class="step">Logs in as hayden.zieme12@hotmail.com, adds a product, sets shipping, transitions to
+ArrangingPayment, then calls createCashfreeOrder and opens the Checkout modal.</div>
+
+<button id="activeOrderBtn">Check active order / payments</button>
+
+<div id="log"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let authToken = null;
+
+function log(title, data, isError) {
+    const div = document.createElement('div');
+    div.className = 'entry ' + (isError ? 'error' : 'ok');
+    div.innerHTML = '<strong>' + title + '</strong><pre>' + JSON.stringify(data, null, 2) + '</pre>';
+    $('log').prepend(div);
+}
+
+async function gql(query, variables) {
+    const res = await fetch($('apiUrl').value, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            ...(authToken ? { Authorization: 'Bearer ' + authToken } : {}),
+        },
+        body: JSON.stringify({ query, variables }),
+    });
+    const token = res.headers.get('vendure-auth-token');
+    if (token) {
+        authToken = token;
+    }
+    const json = await res.json();
+    if (json.errors) {
+        throw new Error(json.errors.map((e) => e.message).join('; '));
+    }
+    return json.data;
+}
+
+const ORDER_FIELDS = `
+    id
+    code
+    state
+    active
+    totalWithTax
+    currencyCode
+    payments { id transactionId method amount state metadata }
+`;
+
+async function login() {
+    const data = await gql(
+        `mutation Login($username: String!, $password: String!) {
+            login(username: $username, password: $password) {
+                ... on CurrentUser { id identifier }
+                ... on ErrorResult { errorCode message }
+            }
+        }`,
+        { username: 'hayden.zieme12@hotmail.com', password: '12345678' },
+    );
+    log('login', data);
+    return data.login;
+}
+
+async function resolveVariantId() {
+    const configured = $('variantId').value.trim();
+    if (configured) {
+        return configured;
+    }
+    const data = await gql(
+        `query { search(input: { take: 1 }) { items { productVariantId productVariantName } } }`,
+    );
+    log('search (auto-pick product variant)', data);
+    const item = data.search.items[0];
+    if (!item) {
+        throw new Error('No products found in the catalog - enter a Product variant ID manually');
+    }
+    $('variantId').value = item.productVariantId;
+    return item.productVariantId;
+}
+
+async function addItem() {
+    const productVariantId = await resolveVariantId();
+    const data = await gql(
+        `mutation AddItem($productVariantId: ID!, $quantity: Int!) {
+            addItemToOrder(productVariantId: $productVariantId, quantity: $quantity) {
+                ... on Order { ${ORDER_FIELDS} }
+                ... on ErrorResult { errorCode message }
+            }
+        }`,
+        { productVariantId, quantity: 1 },
+    );
+    log('addItemToOrder', data);
+    return data.addItemToOrder;
+}
+
+async function setShipping() {
+    const addrData = await gql(
+        `mutation SetAddr($input: CreateAddressInput!) {
+            setOrderShippingAddress(input: $input) {
+                ... on Order { ${ORDER_FIELDS} }
+                ... on ErrorResult { errorCode message }
+            }
+        }`,
+        {
+            input: {
+                fullName: 'Test Customer',
+                streetLine1: '12 The Street',
+                city: 'Leeuwarden',
+                postalCode: '123456',
+                countryCode: 'AT',
+            },
+        },
+    );
+    log('setOrderShippingAddress', addrData);
+
+    const methodsData = await gql(`query { eligibleShippingMethods { id price name } }`);
+    log('eligibleShippingMethods', methodsData);
+    const methods = methodsData.eligibleShippingMethods;
+    if (!methods || !methods.length) {
+        throw new Error('No eligible shipping methods found');
+    }
+
+    const setMethodData = await gql(
+        `mutation SetMethod($id: [ID!]!) {
+            setOrderShippingMethod(shippingMethodId: $id) {
+                ... on Order { ${ORDER_FIELDS} }
+                ... on ErrorResult { errorCode message }
+            }
+        }`,
+        { id: [methods[0].id] },
+    );
+    log('setOrderShippingMethod', setMethodData);
+}
+
+async function transitionToArrangingPayment() {
+    const data = await gql(
+        `mutation Transition($state: String!) {
+            transitionOrderToState(state: $state) {
+                ... on Order { ${ORDER_FIELDS} }
+                ... on ErrorResult { errorCode message }
+            }
+        }`,
+        { state: 'ArrangingPayment' },
+    );
+    log('transitionOrderToState(ArrangingPayment)', data);
+    return data.transitionOrderToState;
+}
+
+async function createCashfreeOrder() {
+    const data = await gql(
+        `mutation { createCashfreeOrder { orderId paymentSessionId environment } }`,
+    );
+    log('createCashfreeOrder', data);
+    return data.createCashfreeOrder;
+}
+
+async function addPaymentToOrder(metadata) {
+    const data = await gql(
+        `mutation AddPayment($input: PaymentInput!) {
+            addPaymentToOrder(input: $input) {
+                ... on Order { ${ORDER_FIELDS} }
+                ... on ErrorResult { errorCode message }
+            }
+        }`,
+        {
+            input: {
+                method: $('methodCode').value,
+                metadata,
+            },
+        },
+    );
+    log('addPaymentToOrder', data);
+    return data.addPaymentToOrder;
+}
+
+async function openCashfreeCheckout(cashfreeOrder) {
+    const cashfree = await Cashfree({ mode: cashfreeOrder.environment.toLowerCase() });
+    return cashfree.checkout({
+        paymentSessionId: cashfreeOrder.paymentSessionId,
+        redirectTarget: '_modal',
+    });
+}
+
+$('runBtn').addEventListener('click', async () => {
+    $('runBtn').disabled = true;
+    try {
+        await login();
+        await addItem();
+        await setShipping();
+        await transitionToArrangingPayment();
+        const cashfreeOrder = await createCashfreeOrder();
+
+        const checkoutResult = await openCashfreeCheckout(cashfreeOrder);
+        log('Cashfree Checkout result', checkoutResult);
+
+        const order = await addPaymentToOrder({
+            cfOrderId: cashfreeOrder.orderId,
+        });
+        log('Final order state', order);
+    } catch (err) {
+        log('Error', { message: err.message }, true);
+    } finally {
+        $('runBtn').disabled = false;
+    }
+});
+
+$('activeOrderBtn').addEventListener('click', async () => {
+    try {
+        const data = await gql(`query { activeOrder { ${ORDER_FIELDS} } }`);
+        log('activeOrder', data);
+    } catch (err) {
+        log('Error', { message: err.message }, true);
+    }
+});
+</script>
+</body>
+</html>

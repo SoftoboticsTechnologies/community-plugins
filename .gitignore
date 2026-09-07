@@ -8,6 +8,10 @@ __data__/
 *.sqlite
 .idea/
 .vscode/
+.DS_Store
+
+# Claude Code local worktrees (never intended to be committed)
+.claude/worktrees/
 
 # Vendure telemetry runtime artifacts
 .vendure/

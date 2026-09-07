@@ -42,6 +42,7 @@
 | [`@vendure-community/punchout-gateway-plugin`](packages/punchout-gateway-plugin) | Punchout/cXML procurement gateway                | [![npm](https://img.shields.io/npm/v/@vendure-community/punchout-gateway-plugin)](https://www.npmjs.com/package/@vendure-community/punchout-gateway-plugin) |
 | [`@vendure-community/razorpay-plugin`](packages/razorpay-plugin)           | Razorpay payment integration                     | [![npm](https://img.shields.io/npm/v/@vendure-community/razorpay-plugin)](https://www.npmjs.com/package/@vendure-community/razorpay-plugin)           |
 | [`@vendure-community/shiprocket-plugin`](packages/shiprocket-plugin)       | Shiprocket shipping & fulfillment integration     | [![npm](https://img.shields.io/npm/v/@vendure-community/shiprocket-plugin)](https://www.npmjs.com/package/@vendure-community/shiprocket-plugin)       |
+| [`@vendure-community/cashfree-plugin`](packages/cashfree-plugin)           | Cashfree payment integration                     | [![npm](https://img.shields.io/npm/v/@vendure-community/cashfree-plugin)](https://www.npmjs.com/package/@vendure-community/cashfree-plugin)           |
 
 ## Community Ownership
 
