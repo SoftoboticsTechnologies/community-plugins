@@ -1,5 +1,5 @@
 {
-    "name": "@akshay4362/razorpay-plugin",
+    "name": "@softobotics/razorpay-plugin",
     "version": "3.0.0",
     "license": "GPL-3.0-or-later",
     "main": "lib/index.js",

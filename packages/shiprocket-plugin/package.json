@@ -1,5 +1,5 @@
 {
-    "name": "@akshay4362/shiprocket-plugin",
+    "name": "@softobotics/shiprocket-plugin",
     "version": "4.0.2",
     "license": "GPL-3.0-or-later",
     "main": "lib/index.js",

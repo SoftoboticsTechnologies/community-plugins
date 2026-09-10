@@ -1,5 +1,5 @@
 {
-    "name": "@akshay4362/cashfree-plugin",
+    "name": "@softobotics/cashfree-plugin",
     "version": "1.0.0",
     "license": "GPL-3.0-or-later",
     "main": "lib/index.js",
