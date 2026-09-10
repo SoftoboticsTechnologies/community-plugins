@@ -1,0 +1,56 @@
+{
+    "name": "@softobotics/s3-plugin",
+    "version": "1.0.1",
+    "description": "A Vendure plugin that stores and serves Asset files (product images etc.) in an AWS S3 bucket instead of local disk.",
+    "keywords": [
+        "vendure",
+        "vendure-plugin",
+        "s3",
+        "aws",
+        "asset-storage"
+    ],
+    "license": "GPL-3.0-or-later",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/SoftoboticsTechnologies/community-plugins.git",
+        "directory": "packages/s3-plugin"
+    },
+    "main": "lib/index.js",
+    "types": "lib/index.d.ts",
+    "files": [
+        "lib/**/*"
+    ],
+    "private": false,
+    "scripts": {
+        "watch": "tsc -p ./tsconfig.build.json --watch",
+        "build": "rimraf lib && tsc -p ./tsconfig.build.json",
+        "e2e": "cross-env PACKAGE=s3-plugin vitest --config ../../e2e-common/vitest.config.mts --run",
+        "e2e:watch": "cross-env PACKAGE=s3-plugin vitest --config ../../e2e-common/vitest.config.mts",
+        "lint": "eslint .",
+        "ci": "npm run build",
+        "dev-server": "npm run build && DB=sqlite node -r ts-node/register e2e/s3-dev-server.ts"
+    },
+    "homepage": "https://www.vendure.io/",
+    "funding": "https://github.com/sponsors/michaelbromley",
+    "publishConfig": {
+        "access": "public"
+    },
+    "peerDependencies": {
+        "@vendure/core": "^3.6.0-0",
+        "@vendure/common": "^3.6.0-0",
+        "@aws-sdk/client-s3": "^3.x",
+        "@aws-sdk/lib-storage": "^3.x"
+    },
+    "devDependencies": {
+        "@aws-sdk/client-s3": "^3.700.0",
+        "@aws-sdk/lib-storage": "^3.700.0",
+        "@vendure/admin-ui-plugin": "3.6.0-minor-202603280303",
+        "@vendure/asset-server-plugin": "3.6.0-minor-202603280303",
+        "@vendure/common": "3.6.0-minor-202603280303",
+        "@vendure/core": "3.6.0-minor-202603280303",
+        "@vendure/testing": "3.6.0-minor-202603280303",
+        "aws-sdk-client-mock": "^4.1.0",
+        "rimraf": "^5.0.5",
+        "typescript": "5.8.2"
+    }
+}

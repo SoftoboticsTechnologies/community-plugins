@@ -24,6 +24,7 @@ import { DataSourceOptions } from 'typeorm';
 // import { StellatePlugin } from '../packages/stellate-plugin/src/stellate-plugin';
 // import { PubSubPlugin } from '../packages/pub-sub-plugin/src/plugin';
 // import { PunchOutGatewayPlugin } from '../packages/punchout-gateway-plugin/src/punchout-gateway-plugin';
+import { S3Plugin } from '../packages/s3-plugin/src/s3.plugin';
 
 /**
  * Dev server config for testing community plugins during development.
@@ -76,6 +77,21 @@ export const devConfig: VendureConfig = {
 
         // --- Community plugins ---
         // Uncomment plugins you want to develop/test:
+
+        // S3Plugin must come after AssetServerPlugin - it overrides the asset storage
+        // strategy AssetServerPlugin configures. Only affects NEW uploads; the 156 assets
+        // already seeded by `npm run populate` stay on local disk since they were written
+        // before this was added - re-upload/re-populate to move existing images to S3 too.
+        S3Plugin.init({
+            bucket: process.env.S3_BUCKET!,
+            credentials: {
+                accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+                secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+            },
+            nativeS3Configuration: {
+                region: process.env.S3_REGION,
+            },
+        }),
 
         // ElasticsearchPlugin.init({
         //     host: 'http://localhost',
