@@ -11,8 +11,9 @@ const GITHUB_API_URL = 'https://api.github.com';
 // Channel admin (Permission.UpdateChannel — already privileged, but not necessarily trusted
 // with every secret this process holds) cannot point this field at an unrelated credential
 // (e.g. DB_PASSWORD, SUPERADMIN_PASSWORD, COOKIE_SECRET) and have its value transmitted to
-// GitHub's API as a Bearer token. Matches the naming convention already used in .env.example.
-const ALLOWED_TOKEN_REF_PATTERN = /^GITHUB_TOKEN(_[A-Z0-9_]+)?$/;
+// GitHub's API as a Bearer token. GITHUB_TOKEN matches .env.example's convention; GIT_TOKEN
+// is accepted too, matching this deployment's existing .env naming.
+const ALLOWED_TOKEN_REF_PATTERN = /^GIT(HUB)?_TOKEN(_[A-Z0-9_]+)?$/;
 
 // repoOwner/repoName/branch: GitHub's own allowed characters for these identifiers.
 // workflowFilename: a bare filename ending in .yml/.yaml, no path separators (so it can't be
