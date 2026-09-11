@@ -9,6 +9,10 @@ import { api, Badge, Button, Progress, useChannel } from '@vendure/dashboard';
 import { channelDeploymentStatusDocument, publishChannelDocument } from './channel-deployment-status.graphql.js';
 
 const POLL_INTERVAL_MS = 45_000;
+// Polled at this much shorter interval while a deploy is actually in flight, so completion is
+// caught quickly rather than waiting for the idle 45s cadence on top of the server's own
+// (now also bypassed while in flight — see DeploymentTrackerService.getStatus) GitHub cache.
+const DEPLOYING_POLL_INTERVAL_MS = 8_000;
 const DEPLOYING_TIMEOUT_MS = 10 * 60 * 1000;
 
 // Used only until a channel has completed at least one deploy through this feature (so we
@@ -108,7 +112,12 @@ function useDeploymentStatus(channelId: string | undefined) {
         queryKey,
         queryFn: () => api.query(channelDeploymentStatusDocument, { channelId: channelId! }),
         enabled: !!channelId,
-        refetchInterval: POLL_INTERVAL_MS,
+        refetchInterval: query => {
+            const deployStatus = query.state.data?.channelDeploymentStatus.deployStatus;
+            return deployStatus === 'triggered' || deployStatus === 'running'
+                ? DEPLOYING_POLL_INTERVAL_MS
+                : POLL_INTERVAL_MS;
+        },
     });
 
     const { mutate, isPending } = useMutation({
@@ -166,10 +175,12 @@ function DeploymentStatusDisplay({ channelId }: Readonly<{ channelId: string }>)
 
     return (
         <div className="flex items-center gap-2">
-            {progressPct !== null && (
-                <Progress value={progressPct} className="w-16" aria-label="Deployment progress" />
-            )}
-            {badge}
+            <div className="flex flex-col items-stretch gap-1">
+                {badge}
+                {progressPct !== null && (
+                    <Progress value={progressPct} className="w-full" aria-label="Deployment progress" />
+                )}
+            </div>
             <Button
                 type="button"
                 size="sm"

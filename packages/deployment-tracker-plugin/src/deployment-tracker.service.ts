@@ -20,10 +20,17 @@ export class DeploymentTrackerService {
 
         const channel = await this.channelService.findOne(ctx, channelId);
         const lastChangedAt = state?.lastChangedAt ?? null;
+        // Bypass the 45s GitHub-lookup cache while a deploy is actually in flight — an admin
+        // watching the "Deploying..." badge cares about catching the real completion moment
+        // quickly, which the cache would otherwise delay by up to 45s on top of the dashboard's
+        // own poll interval.
+        const isAwaitingCompletion = state?.deployStatus === 'triggered' || state?.deployStatus === 'running';
         let lastDeployedAt: Date | null = null;
         if (channel) {
             try {
-                lastDeployedAt = (await this.githubDeploymentService.getLastSuccessfulDeploy(channel)) ?? null;
+                lastDeployedAt =
+                    (await this.githubDeploymentService.getLastSuccessfulDeploy(channel, isAwaitingCompletion)) ??
+                    null;
             } catch {
                 // No/invalid GitHub config or a transient API error: treat as "unknown",
                 // not a hard failure of the whole status query.

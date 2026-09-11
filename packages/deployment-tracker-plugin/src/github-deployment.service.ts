@@ -39,10 +39,16 @@ interface ChannelGithubConfig {
 export class GitHubDeploymentService {
     private lastDeployCache = new Map<string, { value: Date | undefined; expiresAt: number }>();
 
-    async getLastSuccessfulDeploy(channel: Channel): Promise<Date | undefined> {
+    /**
+     * @param skipCache - Bypasses the 45s cache. Pass this while a channel's deployStatus is
+     * 'triggered'/'running' — the caller is actively waiting for GitHub to confirm completion,
+     * so freshness matters more here than the API-call savings the cache exists for. Leave the
+     * cache in place for the common case (nothing in flight, many idle status checks).
+     */
+    async getLastSuccessfulDeploy(channel: Channel, skipCache = false): Promise<Date | undefined> {
         const channelId = String(channel.id);
         const cached = this.lastDeployCache.get(channelId);
-        if (cached && cached.expiresAt > Date.now()) {
+        if (!skipCache && cached && cached.expiresAt > Date.now()) {
             return cached.value;
         }
 
