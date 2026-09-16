@@ -8,7 +8,7 @@ defineDashboardExtension({
             id: 'deployment-tracker-status',
             component: DeploymentStatusToolbarItem,
             position: { itemId: 'alerts', order: 'before' },
-            requiresPermission: ['UpdateChannel'],
+            requiresPermission: ['UpdateCatalog'],
         },
     ],
 });

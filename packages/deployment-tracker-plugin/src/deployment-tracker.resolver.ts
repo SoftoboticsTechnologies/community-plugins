@@ -9,7 +9,7 @@ export class DeploymentTrackerResolver {
     constructor(private deploymentTrackerService: DeploymentTrackerService) {}
 
     @Query()
-    @Allow(Permission.UpdateChannel)
+    @Allow(Permission.UpdateCatalog)
     async channelDeploymentStatus(
         @Ctx() ctx: RequestContext,
         @Args() args: { channelId: ID },
@@ -18,7 +18,7 @@ export class DeploymentTrackerResolver {
     }
 
     @Mutation()
-    @Allow(Permission.UpdateChannel)
+    @Allow(Permission.UpdateCatalog)
     async publishChannel(
         @Ctx() ctx: RequestContext,
         @Args() args: { channelId: ID },
