@@ -14,28 +14,34 @@ API and the Cashfree Checkout JS SDK.
 3. Install the plugin and the Cashfree Node SDK:
 
     ```shell
-    npm install @vendure-community/cashfree-plugin cashfree-pg
+    npm install @softobotics/cashfree-plugin cashfree-pg
     ```
 
 ## Setup
 
 1. Add the plugin to your VendureConfig `plugins` array:
     ```ts
-    import { CashfreePlugin } from '@vendure-community/cashfree-plugin';
+    import { CashfreePlugin } from '@softobotics/cashfree-plugin';
 
     // ...
 
     plugins: [
       CashfreePlugin.init({
-        // optional: see the CashfreePluginOptions type for refundSpeed
+        refundSpeed: 'STANDARD', // optional: 'STANDARD' | 'INSTANT', defaults to 'STANDARD'
       }),
     ]
     ```
 2. Create a new PaymentMethod in the Admin UI, and select "Cashfree payments" as the handler.
-3. Set the "Client ID", "Client Secret", and "Environment" (Sandbox/Production) arguments on the
-   PaymentMethod form. Each PaymentMethod using the Cashfree handler can be configured with its own Cashfree
-   account, so different channels/PaymentMethods can point at different accounts. Only one enabled
-   PaymentMethod using the Cashfree handler is supported per channel at a time.
+3. Set the following handler arguments on the PaymentMethod form. Each PaymentMethod using the Cashfree
+   handler can be configured with its own Cashfree account, so different channels/PaymentMethods can point
+   at different accounts. Only one enabled PaymentMethod using the Cashfree handler is supported per channel
+   at a time.
+
+   | Argument       | Description                                                                          |
+   | -------------- | ------------------------------------------------------------------------------------- |
+   | Client ID      | Cashfree `x-client-id`, from the Merchant Dashboard.                                   |
+   | Client Secret  | Cashfree `x-client-secret`. Also used to verify webhook signatures (no separate secret). |
+   | Environment    | `SANDBOX` or `PRODUCTION` (defaults to `SANDBOX`).                                     |
 
 ## Storefront Usage
 
@@ -98,9 +104,19 @@ process that permits a `Pending -> Pending` self-transition (Vendure's default p
 
 ## Local Development
 
-Set `CASHFREE_CLIENT_ID` and `CASHFREE_CLIENT_SECRET` in a `.env` file in this package (these seed the
-dev-server's Cashfree PaymentMethod handler arguments, not `CashfreePlugin.init()`), then run:
+Set `CASHFREE_CLIENT_ID` and `CASHFREE_CLIENT_SECRET` in a `.env` file in this package (copy `.env.example`;
+these seed the dev-server's Cashfree PaymentMethod handler arguments, not `CashfreePlugin.init()`), then run:
 
 ```shell
 npm run dev-server
+```
+
+Other package scripts:
+
+```shell
+npm run build      # compile to lib/
+npm run watch       # compile in watch mode
+npm run lint        # eslint
+npm run e2e         # run the e2e suite once
+npm run e2e:watch   # run the e2e suite in watch mode
 ```
