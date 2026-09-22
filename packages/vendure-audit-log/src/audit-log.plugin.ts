@@ -50,6 +50,7 @@ export const DEFAULT_AUDIT_LOG_OPTIONS: AuditLogPluginOptions = {
         schema: adminApiExtensions,
         resolvers: [AuditLogResolver, AuditSettingsResolver],
     },
+    dashboard: './dashboard/index.tsx',
     configuration: config => {
         config.authOptions.customPermissions.push(READ_AUDIT_LOG_PERMISSION, MANAGE_AUDIT_LOG_SETTINGS_PERMISSION);
         config.schedulerOptions.tasks.push(auditLogRetentionTask);

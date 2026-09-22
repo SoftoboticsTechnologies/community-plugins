@@ -125,6 +125,9 @@ export class AuditSubscribersService implements OnApplicationBootstrap {
         const requestMeta = this.requestContextStore.get();
         const settings = this.settingsService.getSnapshot();
         await this.auditLogService.record({
+            channelId: String(ctx.channel.id),
+            channelCode: ctx.channel.code,
+            channelName: ctx.channel.description || ctx.channel.code,
             ...rest,
             ...actor,
             source: 'EVENT_BUS',
