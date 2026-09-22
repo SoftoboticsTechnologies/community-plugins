@@ -14,15 +14,12 @@ import {
     Switch,
     useDetailPage,
 } from '@vendure/dashboard';
-import { Trans, useLingui } from '@lingui/react/macro';
 import { toast } from 'sonner';
 import { auditLogSettingsDocument, updateAuditLogSettingsDocument } from './audit-log-settings.graphql';
 
 const pageId = 'audit-log-settings';
 
 export function AuditLogSettingsPage() {
-    const { t } = useLingui();
-
     const { form, submitHandler, entity, isPending } = useDetailPage({
         queryDocument: auditLogSettingsDocument,
         entityName: 'AuditLogSettings',
@@ -37,11 +34,11 @@ export function AuditLogSettingsPage() {
         }),
         params: { id: 'undefined' },
         onSuccess: () => {
-            toast(t`Successfully updated audit log settings`);
+            toast('Successfully updated audit log settings');
             form.reset(form.getValues());
         },
         onError: err => {
-            toast(t`Failed to update audit log settings`, {
+            toast('Failed to update audit log settings', {
                 description: err instanceof Error ? err.message : 'Unknown error',
             });
         },
@@ -53,16 +50,14 @@ export function AuditLogSettingsPage() {
 
     return (
         <Page pageId={pageId} form={form} submitHandler={submitHandler} entity={entity}>
-            <PageTitle>
-                <Trans>Audit Log Settings</Trans>
-            </PageTitle>
+            <PageTitle>Audit Log Settings</PageTitle>
             <PageActionBar>
                 <ActionBarItem itemId="save-button" requiresPermission={['ManageAuditLogSettings']}>
                     <Button
                         type="submit"
                         disabled={!form.formState.isDirty || !form.formState.isValid || isPending}
                     >
-                        <Trans>Update</Trans>
+                        Update
                     </Button>
                 </ActionBarItem>
             </PageActionBar>
@@ -72,19 +67,14 @@ export function AuditLogSettingsPage() {
                         <FormFieldWrapper
                             control={form.control}
                             name="retentionDays"
-                            label={<Trans>Retention period (days)</Trans>}
-                            description={
-                                <Trans>
-                                    Audit log entries older than this are deleted by the daily retention
-                                    task. Set to 0 to keep entries indefinitely.
-                                </Trans>
-                            }
+                            label="Retention period (days)"
+                            description="Audit log entries older than this are deleted by the daily retention task. Set to 0 to keep entries indefinitely."
                             render={({ field }) => <NumberInput {...field} />}
                         />
                         <FormFieldWrapper
                             control={form.control}
                             name="captureIpAddress"
-                            label={<Trans>Capture IP address</Trans>}
+                            label="Capture IP address"
                             render={({ field }) => (
                                 <Switch checked={field.value} onCheckedChange={field.onChange} />
                             )}
@@ -92,7 +82,7 @@ export function AuditLogSettingsPage() {
                         <FormFieldWrapper
                             control={form.control}
                             name="captureUserAgent"
-                            label={<Trans>Capture user agent</Trans>}
+                            label="Capture user agent"
                             render={({ field }) => (
                                 <Switch checked={field.value} onCheckedChange={field.onChange} />
                             )}
@@ -100,13 +90,8 @@ export function AuditLogSettingsPage() {
                         <FormFieldWrapper
                             control={form.control}
                             name="redactSensitiveFields"
-                            label={<Trans>Redact sensitive fields</Trans>}
-                            description={
-                                <Trans>
-                                    Replaces well-known sensitive keys (passwords, tokens, secrets, etc.)
-                                    with [REDACTED] inside captured diffs.
-                                </Trans>
-                            }
+                            label="Redact sensitive fields"
+                            description="Replaces well-known sensitive keys (passwords, tokens, secrets, etc.) with [REDACTED] inside captured diffs."
                             render={({ field }) => (
                                 <Switch checked={field.value} onCheckedChange={field.onChange} />
                             )}
@@ -114,13 +99,8 @@ export function AuditLogSettingsPage() {
                         <FormFieldWrapper
                             control={form.control}
                             name="extraRedactedKeys"
-                            label={<Trans>Extra redacted keys</Trans>}
-                            description={
-                                <Trans>
-                                    Additional field names (case-insensitive) to redact, on top of the
-                                    built-in list.
-                                </Trans>
-                            }
+                            label="Extra redacted keys"
+                            description="Additional field names (case-insensitive) to redact, on top of the built-in list."
                             render={({ field }) => (
                                 <StringListInput value={field.value ?? []} onChange={field.onChange} />
                             )}
