@@ -16,6 +16,8 @@ interface PendingImport {
     originalText: string;
     errors: ValidationError[];
     createdAt: number;
+    userId: string | number | undefined;
+    channelId: string | number;
 }
 
 const TTL_MS = 30 * 60 * 1000;
@@ -29,7 +31,7 @@ export class ProductImportController {
     @Post('validate')
     @Allow(ImportProducts.Permission)
     @UseInterceptors(FileInterceptor('file'))
-    async validate(@UploadedFile() file: Express.Multer.File) {
+    async validate(@Ctx() ctx: RequestContext, @UploadedFile() file: Express.Multer.File) {
         if (!file) throw new BadRequestException('No file uploaded');
         const text = file.buffer.toString('utf-8');
         const rows = isShopifyCsv(text) ? mapShopifyCsv(text) : mapNativeCsv(text);
@@ -37,7 +39,7 @@ export class ProductImportController {
 
         this.evictExpired();
         const jobToken = randomUUID();
-        this.pending.set(jobToken, { rows, originalText: text, errors, createdAt: Date.now() });
+        this.pending.set(jobToken, { rows, originalText: text, errors, createdAt: Date.now(), userId: ctx.activeUserId, channelId: ctx.channelId });
 
         return {
             jobToken,
@@ -51,7 +53,7 @@ export class ProductImportController {
     @Allow(ImportProducts.Permission)
     async commit(@Ctx() ctx: RequestContext, @Body() body: { jobToken: string; skipInvalidRows?: boolean }) {
         const pending = this.pending.get(body.jobToken);
-        if (!pending) throw new NotFoundException('Unknown or expired import job token');
+        if (!pending || !this.isOwnedBy(pending, ctx)) throw new NotFoundException('Unknown or expired import job token');
 
         const invalidRowNumbers = new Set(pending.errors.map(e => e.row));
         if (invalidRowNumbers.size > 0 && !body.skipInvalidRows) {
@@ -66,13 +68,18 @@ export class ProductImportController {
 
     @Get('errors/:jobToken')
     @Allow(ImportProducts.Permission)
-    async downloadErrors(@Param('jobToken') jobToken: string, @Res() res: Response) {
+    async downloadErrors(@Ctx() ctx: RequestContext, @Param('jobToken') jobToken: string, @Res() res: Response) {
         const pending = this.pending.get(jobToken);
-        if (!pending) throw new NotFoundException('Unknown or expired import job token');
+        if (!pending || !this.isOwnedBy(pending, ctx)) throw new NotFoundException('Unknown or expired import job token');
         const csv = annotateCsvWithErrors(pending.originalText, pending.errors);
         res.setHeader('Content-Type', 'text/csv');
         res.setHeader('Content-Disposition', 'attachment; filename="import-errors.csv"');
         res.send(csv);
+    }
+
+    /** A pending import job may only be committed or downloaded by the admin user and channel that uploaded it. */
+    private isOwnedBy(pending: PendingImport, ctx: RequestContext): boolean {
+        return pending.userId !== undefined && pending.userId === ctx.activeUserId && pending.channelId === ctx.channelId;
     }
 
     private evictExpired() {
