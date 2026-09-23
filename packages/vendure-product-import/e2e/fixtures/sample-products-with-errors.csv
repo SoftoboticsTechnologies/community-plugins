@@ -1,0 +1,4 @@
+name,slug,description,assets,facets,optionGroups,optionValues,sku,price,taxCategory,stockOnHand,trackInventory,variantAssets,variantFacets,enabled
+Broken Mug,broken-mug,"Missing sku",,,,,,999,standard,10,true,,,true
+Bad Price Pen,bad-price-pen,"Non-numeric price",,,,,PEN-1,not-a-number,standard,10,true,,,true
+Mismatched Hat,mismatched-hat,"Two option groups one value",,,Size|Color,Small,HAT-1,500,standard,10,true,,,true

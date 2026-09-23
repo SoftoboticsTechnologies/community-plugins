@@ -1,0 +1,5 @@
+name,slug,description,assets,facets,optionGroups,optionValues,sku,price,taxCategory,stockOnHand,trackInventory,variantAssets,variantFacets,enabled
+Classic T-Shirt,classic-t-shirt,"A soft cotton t-shirt",https://example.com/images/tshirt-red.jpg|https://example.com/images/tshirt-blue.jpg,brand:Acme|type:Apparel,Size|Color,Small|Red,TSHIRT-S-RED,1999,standard,100,true,,,true
+,,,,,,,Medium|Red,TSHIRT-M-RED,1999,standard,80,true,,,true
+,,,,,,,Small|Blue,TSHIRT-S-BLUE,1999,standard,50,true,,,true
+Canvas Tote Bag,canvas-tote-bag,"Durable canvas tote",https://example.com/images/tote.jpg,brand:Acme|type:Bags,,,TOTE-001,1299,standard,200,true,,,true
