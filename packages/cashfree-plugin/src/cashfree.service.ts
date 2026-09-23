@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { isAxiosError } from 'axios';
 import { ConfigArg } from '@vendure/common/lib/generated-types';
 import { Order, PaymentMethod, PaymentMethodService, RequestContext, UserInputError } from '@vendure/core';
 import type { PaymentEntity, RefundEntity } from 'cashfree-pg';
@@ -31,25 +32,39 @@ export class CashfreeService {
         const { client } = await this.resolveForOrder(ctx, order);
         const amount = toMajorUnits(order.totalWithTax);
 
-        const response = await client.instance.PGCreateOrder({
-            order_id: order.code,
-            order_amount: amount,
-            order_currency: order.currencyCode,
-            customer_details: {
-                customer_id: order.customer ? String(order.customer.id) : `guest-${order.id}`,
-                customer_email: order.customer?.emailAddress,
-                // Cashfree requires a 10-digit customer_phone; fall back to a placeholder when the
-                // Customer has none recorded, matching the test value used in Cashfree's own docs.
-                customer_phone: order.customer?.phoneNumber || '9999999999',
-            },
-            order_tags: {
-                channelToken: ctx.channel.token,
-                orderCode: order.code,
-                languageCode: ctx.languageCode ?? '',
-            },
-        });
+        let paymentSessionId: string | null | undefined;
+        try {
+            const response = await client.instance.PGCreateOrder({
+                order_id: order.code,
+                order_amount: amount,
+                order_currency: order.currencyCode,
+                customer_details: {
+                    customer_id: order.customer ? String(order.customer.id) : `guest-${order.id}`,
+                    customer_email: order.customer?.emailAddress,
+                    // Cashfree requires a 10-digit customer_phone; fall back to a placeholder when the
+                    // Customer has none recorded, matching the test value used in Cashfree's own docs.
+                    customer_phone: order.customer?.phoneNumber || '9999999999',
+                },
+                order_tags: {
+                    channelToken: ctx.channel.token,
+                    orderCode: order.code,
+                    languageCode: ctx.languageCode ?? '',
+                },
+            });
+            paymentSessionId = response.data.payment_session_id;
+        } catch (err) {
+            // Unlike Razorpay's `receipt`, Cashfree's `order_id` must be globally unique - a repeat
+            // create call for the same order (e.g. the payment step remounting) gets rejected with
+            // 409 rather than returning the existing order. Fetch the already-created order instead
+            // of failing, mirroring the Stripe plugin's PaymentIntent reuse.
+            if (isAxiosError(err) && err.response?.status === 409) {
+                const existing = await client.instance.PGFetchOrder(order.code);
+                paymentSessionId = existing.data.payment_session_id;
+            } else {
+                throw err;
+            }
+        }
 
-        const paymentSessionId = response.data.payment_session_id;
         if (!paymentSessionId) {
             throw new UserInputError('Cashfree did not return a payment_session_id for the order');
         }
