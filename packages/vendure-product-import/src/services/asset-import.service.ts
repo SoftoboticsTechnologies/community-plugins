@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { AssetService, Logger, RequestContext } from '@vendure/core';
 import { lookup as dnsLookup } from 'dns/promises';
+import * as http from 'http';
+import * as https from 'https';
 import { isIP } from 'net';
 import { Readable } from 'stream';
 
@@ -48,8 +50,14 @@ function isPrivateAddress(ip: string): boolean {
     return true;
 }
 
-/** Rejects non-http(s) schemes and any hostname that resolves to a private/loopback/link-local address. */
-async function assertSafeToFetch(url: string): Promise<void> {
+/**
+ * Rejects non-http(s) schemes and any hostname that resolves to a private/loopback/link-local
+ * address, then returns that resolved address so the caller can pin the actual connection to it.
+ * Re-resolving at connect time (instead of reusing this address) would reopen the TOCTOU gap this
+ * check exists to close — a DNS record can legitimately change between validation and connection
+ * ("DNS rebinding").
+ */
+async function resolveSafeAddress(url: string): Promise<string> {
     const parsed = new URL(url);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
         throw new Error(`Unsupported URL scheme "${parsed.protocol}"`);
@@ -58,6 +66,55 @@ async function assertSafeToFetch(url: string): Promise<void> {
     if (isPrivateAddress(address)) {
         throw new Error(`Refusing to fetch from private/internal address`);
     }
+    return address;
+}
+
+interface PinnedResponse {
+    status: number;
+    getHeader(name: string): string | undefined;
+    buffer(): Promise<Buffer>;
+}
+
+/**
+ * Issues a GET request whose TCP connection is pinned to `address`, bypassing DNS resolution
+ * at connect time entirely. The `Host` header and TLS SNI/certificate check still use the
+ * original hostname, so this only changes which IP the socket connects to — it doesn't weaken
+ * TLS validation.
+ */
+function requestPinned(url: URL, address: string): Promise<PinnedResponse> {
+    const mod = url.protocol === 'https:' ? https : http;
+    const family = isIP(address);
+    return new Promise((resolve, reject) => {
+        const req = mod.request(
+            {
+                hostname: url.hostname,
+                port: url.port || (url.protocol === 'https:' ? 443 : 80),
+                path: `${url.pathname}${url.search}`,
+                method: 'GET',
+                headers: { Host: url.hostname },
+                lookup: (_hostname: string, _options: unknown, callback: (err: null, address: string, family: number) => void) => {
+                    callback(null, address, family);
+                },
+            } as http.RequestOptions,
+            res => {
+                const chunks: Buffer[] = [];
+                res.on('data', (chunk: Buffer) => chunks.push(chunk));
+                res.on('end', () => {
+                    resolve({
+                        status: res.statusCode ?? 0,
+                        getHeader: name => {
+                            const value = res.headers[name.toLowerCase()];
+                            return Array.isArray(value) ? value[0] : value;
+                        },
+                        buffer: async () => Buffer.concat(chunks),
+                    });
+                });
+                res.on('error', reject);
+            },
+        );
+        req.on('error', reject);
+        req.end();
+    });
 }
 
 /**
@@ -66,8 +123,9 @@ async function assertSafeToFetch(url: string): Promise<void> {
  * broken image URL doesn't abort the whole product import.
  *
  * Each redirect hop is re-validated (scheme + DNS resolution against private/loopback/
- * link-local ranges) before being followed, to prevent SSRF via a public URL that
- * redirects to an internal address.
+ * link-local ranges) and the connection is pinned to that validated address, to prevent
+ * SSRF via a public URL that redirects to an internal address, and via DNS rebinding
+ * between validation and connection.
  */
 @Injectable()
 export class AssetImportService {
@@ -76,24 +134,24 @@ export class AssetImportService {
     async importFromUrl(ctx: RequestContext, url: string) {
         try {
             let currentUrl = url;
-            let res: Response;
+            let res: PinnedResponse;
             for (let redirects = 0; ; redirects++) {
-                await assertSafeToFetch(currentUrl);
-                res = await fetch(currentUrl, { redirect: 'manual' });
-                if (res.status >= 300 && res.status < 400 && res.headers.get('location')) {
+                const address = await resolveSafeAddress(currentUrl);
+                res = await requestPinned(new URL(currentUrl), address);
+                if (res.status >= 300 && res.status < 400 && res.getHeader('location')) {
                     if (redirects >= MAX_REDIRECTS) {
                         throw new Error('Too many redirects');
                     }
-                    currentUrl = new URL(res.headers.get('location')!, currentUrl).toString();
+                    currentUrl = new URL(res.getHeader('location')!, currentUrl).toString();
                     continue;
                 }
                 break;
             }
-            if (!res.ok) {
+            if (res.status < 200 || res.status >= 300) {
                 Logger.warn(`Failed to fetch asset "${redact(currentUrl)}": HTTP ${res.status}`, loggerCtx);
                 return undefined;
             }
-            const buffer = Buffer.from(await res.arrayBuffer());
+            const buffer = await res.buffer();
             const filename = decodeURIComponent(currentUrl.split('/').pop()?.split('?')[0] || 'asset');
             const result = await this.assetService.createFromFileStream(
                 Readable.from(buffer) as any,
