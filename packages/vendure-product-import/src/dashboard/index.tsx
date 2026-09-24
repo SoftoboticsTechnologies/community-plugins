@@ -6,13 +6,12 @@ export default defineDashboardExtension({
         {
             path: '/product-import',
             component: ProductImportPage,
-        },
-    ],
-    navSections: [
-        {
-            id: 'catalog',
-            placement: { id: 'products', order: 100 },
-            items: [{ id: 'product-import', title: 'Product Import', url: '/product-import' }],
+            navMenuItem: {
+                sectionId: 'catalog',
+                id: 'product-import',
+                url: '/product-import',
+                title: 'Product Import',
+            },
         },
     ],
 });

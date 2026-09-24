@@ -44,6 +44,7 @@ export class AssetImportService {
             const filename = decodeURIComponent(currentUrl.split('/').pop()?.split('?')[0] || 'asset');
             const result = await this.assetService.createFromFileStream(
                 Readable.from(buffer) as any,
+                filename,
                 ctx,
             );
             return 'id' in result ? result : undefined;

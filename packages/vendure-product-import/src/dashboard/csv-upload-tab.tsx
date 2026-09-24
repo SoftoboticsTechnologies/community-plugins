@@ -23,11 +23,15 @@ function getChannelHeader(): Record<string, string> {
 }
 
 export function CsvUploadTab() {
-    const fileInputRef = useRef<HTMLInputElement>(null);
+    const nativeFileInputRef = useRef<HTMLInputElement>(null);
+    const shopifyFileInputRef = useRef<HTMLInputElement>(null);
     const [jobToken, setJobToken] = useState<string | null>(null);
     const [errors, setErrors] = useState<RowError[]>([]);
     const [validRowCount, setValidRowCount] = useState(0);
     const [busy, setBusy] = useState(false);
+    const [commitProgress, setCommitProgress] = useState<number | null>(null);
+    const [nativeFileName, setNativeFileName] = useState<string | null>(null);
+    const [shopifyFileName, setShopifyFileName] = useState<string | null>(null);
 
     const handleFileSelected = async (file: File) => {
         setBusy(true);
@@ -54,9 +58,32 @@ export function CsvUploadTab() {
         }
     };
 
+    const pollCommitStatus = (commitJobId: string): Promise<{ state: string; result?: { createdProducts: number; createdVariants: number }; error?: string }> => {
+        return new Promise((resolve, reject) => {
+            const poll = async () => {
+                try {
+                    const res = await fetch(`${getServerLocation()}/product-import/commit/${commitJobId}`, {
+                        credentials: 'include',
+                        headers: getChannelHeader(),
+                    });
+                    if (!res.ok) throw new Error(await res.text());
+                    const status = await res.json();
+                    setCommitProgress(status.progress ?? 0);
+                    if (status.state === 'COMPLETED') resolve(status);
+                    else if (status.state === 'FAILED' || status.state === 'CANCELLED') reject(new Error(status.error || 'Import failed.'));
+                    else setTimeout(poll, 1500);
+                } catch (err) {
+                    reject(err);
+                }
+            };
+            poll();
+        });
+    };
+
     const handleCommit = async (skipInvalidRows: boolean) => {
         if (!jobToken) return;
         setBusy(true);
+        setCommitProgress(0);
         try {
             const res = await fetch(`${getServerLocation()}/product-import/commit`, {
                 method: 'POST',
@@ -65,15 +92,20 @@ export function CsvUploadTab() {
                 body: JSON.stringify({ jobToken, skipInvalidRows }),
             });
             if (!res.ok) throw new Error(await res.text());
-            const result = await res.json();
-            toast.success(`Imported ${result.createdProducts} products, ${result.createdVariants} variants.`);
+            const { commitJobId } = await res.json();
+            const status = await pollCommitStatus(commitJobId);
+            toast.success(`Imported ${status.result?.createdProducts ?? 0} products, ${status.result?.createdVariants ?? 0} variants.`);
             setJobToken(null);
             setErrors([]);
-            if (fileInputRef.current) fileInputRef.current.value = '';
+            if (nativeFileInputRef.current) nativeFileInputRef.current.value = '';
+            if (shopifyFileInputRef.current) shopifyFileInputRef.current.value = '';
+            setNativeFileName(null);
+            setShopifyFileName(null);
         } catch (err) {
             toast.error(err instanceof Error ? err.message : 'Failed to import.');
         } finally {
             setBusy(false);
+            setCommitProgress(null);
         }
     };
 
@@ -84,17 +116,72 @@ export function CsvUploadTab() {
 
     return (
         <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-                Upload a CSV file. Native Vendure format and Shopify's <code>products_export.csv</code> are both
-                auto-detected.
-            </p>
-            <input
-                ref={fileInputRef}
-                type="file"
-                accept=".csv"
-                disabled={busy}
-                onChange={e => e.target.files?.[0] && handleFileSelected(e.target.files[0])}
-            />
+            <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2 rounded-md border p-4">
+                    <h3 className="text-sm font-medium">Native CSV</h3>
+                    <p className="text-sm text-muted-foreground">Upload a Vendure-format product CSV.</p>
+                    <div className="flex items-center gap-2">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            disabled={busy}
+                            onClick={() => nativeFileInputRef.current?.click()}
+                        >
+                            Choose file
+                        </Button>
+                        <span className="text-sm text-muted-foreground truncate">
+                            {nativeFileName ?? 'No file chosen'}
+                        </span>
+                        <input
+                            ref={nativeFileInputRef}
+                            type="file"
+                            accept=".csv"
+                            disabled={busy}
+                            className="hidden"
+                            onChange={e => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                    setNativeFileName(file.name);
+                                    handleFileSelected(file);
+                                }
+                            }}
+                        />
+                    </div>
+                </div>
+                <div className="space-y-2 rounded-md border p-4">
+                    <h3 className="text-sm font-medium">Shopify CSV</h3>
+                    <p className="text-sm text-muted-foreground">
+                        Upload a Shopify <code>products_export.csv</code> file.
+                    </p>
+                    <div className="flex items-center gap-2">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            disabled={busy}
+                            onClick={() => shopifyFileInputRef.current?.click()}
+                        >
+                            Choose file
+                        </Button>
+                        <span className="text-sm text-muted-foreground truncate">
+                            {shopifyFileName ?? 'No file chosen'}
+                        </span>
+                        <input
+                            ref={shopifyFileInputRef}
+                            type="file"
+                            accept=".csv"
+                            disabled={busy}
+                            className="hidden"
+                            onChange={e => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                    setShopifyFileName(file.name);
+                                    handleFileSelected(file);
+                                }
+                            }}
+                        />
+                    </div>
+                </div>
+            </div>
             {jobToken && (
                 <div className="space-y-2">
                     <p className="text-sm">
@@ -135,6 +222,9 @@ export function CsvUploadTab() {
                             Import all rows
                         </Button>
                     </div>
+                    {commitProgress !== null && (
+                        <p className="text-sm text-muted-foreground">Importing… {commitProgress}%</p>
+                    )}
                 </div>
             )}
         </div>

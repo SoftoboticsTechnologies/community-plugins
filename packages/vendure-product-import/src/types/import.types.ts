@@ -47,3 +47,18 @@ export interface ImportCommitResult {
     skippedRows: number;
     errors: ValidationError[];
 }
+
+export interface ShopifyOAuthOptions {
+    apiKey: string;
+    apiSecret: string;
+    /** Defaults to ['read_products']. */
+    scopes?: string[];
+    /** Public base URL of this server, used to build the OAuth redirect_uri. e.g. https://api.example.com */
+    serverUrl: string;
+    /** Dashboard URL to send the merchant back to once connected. e.g. https://admin.example.com/extensions/product-import */
+    dashboardReturnUrl: string;
+}
+
+export interface ProductImportPluginOptions {
+    shopify?: ShopifyOAuthOptions;
+}

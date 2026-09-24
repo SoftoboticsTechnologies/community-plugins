@@ -3,6 +3,9 @@ import * as http from 'http';
 import * as https from 'https';
 import { isIP } from 'net';
 
+const DNS_TIMEOUT_MS = 5000;
+const REQUEST_TIMEOUT_MS = 10000;
+
 /** Strips credentials before a URL is put into a log line. */
 export function redact(url: string): string {
     try {
@@ -56,11 +59,27 @@ export async function resolveSafeAddress(url: string): Promise<string> {
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
         throw new Error(`Unsupported URL scheme "${parsed.protocol}"`);
     }
-    const { address } = await dnsLookup(parsed.hostname);
+    const { address } = await withTimeout(dnsLookup(parsed.hostname), DNS_TIMEOUT_MS, 'DNS lookup timed out');
     if (isPrivateAddress(address)) {
         throw new Error(`Refusing to fetch from private/internal address`);
     }
     return address;
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error(message)), ms);
+        promise.then(
+            value => {
+                clearTimeout(timer);
+                resolve(value);
+            },
+            err => {
+                clearTimeout(timer);
+                reject(err);
+            },
+        );
+    });
 }
 
 export interface PinnedResponse {
@@ -75,7 +94,11 @@ export interface PinnedResponse {
  * original hostname, so this only changes which IP the socket connects to — it doesn't weaken
  * TLS validation.
  */
-export function requestPinned(url: URL, address: string, options?: { headers?: Record<string, string> }): Promise<PinnedResponse> {
+export function requestPinned(
+    url: URL,
+    address: string,
+    options?: { headers?: Record<string, string>; method?: string; body?: string },
+): Promise<PinnedResponse> {
     const mod = url.protocol === 'https:' ? https : http;
     const family = isIP(address);
     return new Promise((resolve, reject) => {
@@ -84,10 +107,14 @@ export function requestPinned(url: URL, address: string, options?: { headers?: R
                 hostname: url.hostname,
                 port: url.port || (url.protocol === 'https:' ? 443 : 80),
                 path: `${url.pathname}${url.search}`,
-                method: 'GET',
+                method: options?.method ?? 'GET',
                 headers: { Host: url.hostname, ...options?.headers },
-                lookup: (_hostname: string, _options: unknown, callback: (err: null, address: string, family: number) => void) => {
-                    callback(null, address, family);
+                lookup: (_hostname: string, lookupOptions: { all?: boolean }, callback: (err: null, address: any, family?: number) => void) => {
+                    if (lookupOptions?.all) {
+                        callback(null, [{ address, family }]);
+                    } else {
+                        callback(null, address, family);
+                    }
                 },
             } as http.RequestOptions,
             res => {
@@ -106,7 +133,8 @@ export function requestPinned(url: URL, address: string, options?: { headers?: R
                 res.on('error', reject);
             },
         );
+        req.setTimeout(REQUEST_TIMEOUT_MS, () => req.destroy(new Error('Request timed out')));
         req.on('error', reject);
-        req.end();
+        req.end(options?.body);
     });
 }

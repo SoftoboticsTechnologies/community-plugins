@@ -1,6 +1,6 @@
 # @softobotics/vendure-product-import
 
-Import Vendure products from a native CSV, a Shopify `products_export.csv`, or directly from the Shopify Admin API — with pre-import validation and per-row error reporting.
+Import Vendure products from a native CSV, a Shopify `products_export.csv`, or directly from a connected Shopify store — with pre-import validation and per-row error reporting.
 
 ## Install
 
@@ -16,6 +16,47 @@ plugins: [
     ProductImportPlugin,
 ];
 ```
+
+## Shopify Store connect (OAuth)
+
+The "Shopify Store" tab lets a merchant click **Connect Shopify**, approve access on their store, then pick which products to import — no access token to copy/paste. This needs one Shopify app, created once by whoever installs the plugin; each store owner just approves it.
+
+### 1. Create the Shopify app
+
+In [partners.shopify.com](https://partners.shopify.com), under the **same Partner organization that owns the stores you'll connect** (a dev/custom app can only authorize stores belonging to its own org):
+
+1. **Apps → Create app → Create app manually.**
+2. **App setup → URLs**:
+   - **App URL**: any reachable URL (not used by this flow, but required) — e.g. your admin dashboard URL.
+   - **Allowed redirection URL(s)**: exactly `{serverUrl}/shopify/callback` (must match `serverUrl` below character-for-character — scheme, host, path, no trailing slash).
+3. **App setup → Access → Configuration/API scopes**: no fixed scope needs setting here — the plugin passes `scope=` on the authorize URL itself. `read_products` is enough for import.
+4. **Client credentials** tab (or **API credentials**): copy the **Client ID** and **Client secret** — these are `apiKey` / `apiSecret` below.
+5. **Save and Release** the app version — editing App setup alone creates a draft; it only takes effect once released.
+6. **Distribution**: **Custom distribution** is enough for connecting specific merchant stores; no App Store review needed.
+
+### 2. Configure the plugin
+
+```typescript
+// vendure-config.ts
+ProductImportPlugin.init({
+    shopify: {
+        apiKey: process.env.SHOPIFY_API_KEY!,
+        apiSecret: process.env.SHOPIFY_API_SECRET!,
+        // Defaults to ['read_products'].
+        scopes: ['read_products'],
+        // Public base URL of this server — must match the app's redirect URL above.
+        serverUrl: process.env.APP_SERVER_URL!,
+        // Where to send the merchant back after connecting.
+        dashboardReturnUrl: `${process.env.ADMIN_DASHBOARD_URL}/extensions/product-import`,
+    },
+}),
+```
+
+If `shopify` is omitted, the "Connect Shopify" endpoints respond with a 400 rather than failing at boot — CSV import/export still work.
+
+### 3. Connect a store
+
+From the dashboard's Shopify Store tab, enter the store's `.myshopify.com` URL and click **Connect Shopify** — this redirects to Shopify's OAuth consent screen, then back to `/shopify/callback`, which stores an encrypted access token per channel. From there, **Browse products** opens a picker to select which products to import.
 
 ## CSV format
 

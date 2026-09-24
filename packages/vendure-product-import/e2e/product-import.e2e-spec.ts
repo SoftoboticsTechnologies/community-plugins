@@ -1,5 +1,5 @@
 import { createTestEnvironment, registerInitializer, SqljsInitializer } from '@vendure/testing';
-import { mergeConfig } from '@vendure/core';
+import { DefaultJobQueuePlugin, mergeConfig } from '@vendure/core';
 import { describe, beforeAll, afterAll, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
@@ -12,7 +12,7 @@ registerInitializer('sqljs', new SqljsInitializer(path.join(__dirname, '__data__
 
 describe('product-import e2e', () => {
     const devConfig = mergeConfig(testConfig(), {
-        plugins: [ProductImportPlugin],
+        plugins: [DefaultJobQueuePlugin.init({ useDatabaseForBuffer: false }), ProductImportPlugin],
     });
     const { server, adminClient } = createTestEnvironment(devConfig);
     const serverPort = devConfig.apiOptions.port;
@@ -68,11 +68,23 @@ describe('product-import e2e', () => {
             headers: { 'Content-Type': 'application/json', ...authHeaders() },
             body: JSON.stringify({ jobToken, skipInvalidRows: false }),
         });
-        const result = await commitRes.json();
-        expect(result.createdProducts).toBe(2);
-        expect(result.createdVariants).toBe(4);
+        const { commitJobId } = await commitRes.json();
+
+        let status: any;
+        for (let i = 0; i < 150; i++) {
+            const statusRes = await fetch(`http://localhost:${serverPort}/product-import/commit/${commitJobId}`, {
+                headers: authHeaders(),
+            });
+            status = await statusRes.json();
+            if (status.state === 'COMPLETED' || status.state === 'FAILED') break;
+            await new Promise(r => setTimeout(r, 200));
+        }
+
+        expect(status.state).toBe('COMPLETED');
+        expect(status.result.createdProducts).toBe(2);
+        expect(status.result.createdVariants).toBe(4);
 
         const { products } = await adminClient.query(GET_PRODUCT_LIST);
         expect(products.items.map((p: any) => p.slug)).toEqual(expect.arrayContaining(['classic-t-shirt', 'canvas-tote-bag']));
-    });
+    }, 40000);
 });

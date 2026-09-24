@@ -15,7 +15,26 @@ export const adminApiExtensions = gql`
         errors: [ImportRowError!]!
     }
 
+    type ShopifyConnection {
+        storeUrl: String!
+        connectedAt: DateTime!
+    }
+
+    type ShopifyProductSummary {
+        id: ID!
+        title: String!
+        handle: String!
+        imageUrl: String
+        variantCount: Int!
+    }
+
+    extend type Query {
+        shopifyConnection: ShopifyConnection
+        listShopifyProducts: [ShopifyProductSummary!]!
+    }
+
     extend type Mutation {
-        importFromShopifyApi(storeUrl: String!, accessToken: String!, skipInvalidRows: Boolean): ShopifyApiImportResult!
+        disconnectShopify: Boolean!
+        importSelectedShopifyProducts(productIds: [ID!]!, skipInvalidRows: Boolean): ShopifyApiImportResult!
     }
 `;

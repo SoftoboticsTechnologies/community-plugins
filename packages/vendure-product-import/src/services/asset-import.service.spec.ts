@@ -25,7 +25,7 @@ function fakeIncomingMessage(status: number, headers: Record<string, string> = {
 function mockHttpsRequest(status: number, headers: Record<string, string> = {}, body = Buffer.alloc(0)) {
     return vi.fn((_options: unknown, callback: (res: unknown) => void) => {
         callback(fakeIncomingMessage(status, headers, body));
-        return { on: vi.fn(), end: vi.fn() };
+        return { on: vi.fn(), end: vi.fn(), setTimeout: vi.fn() };
     });
 }
 

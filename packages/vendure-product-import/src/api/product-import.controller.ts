@@ -7,7 +7,7 @@ import { isShopifyCsv, mapShopifyCsv } from '../services/shopify-csv-mapper.serv
 import { mapNativeCsv } from '../services/native-csv-mapper.service';
 import { validateImportRows } from '../services/import-validation.service';
 import { annotateCsvWithErrors } from '../services/error-csv.service';
-import { ImportWriterService } from '../services/import-writer.service';
+import { ImportCommitQueueService } from '../services/import-commit-queue.service';
 import { ImportProducts } from '../constants/permissions';
 import type { ImportRow, ValidationError } from '../types/import.types';
 
@@ -26,7 +26,7 @@ const TTL_MS = 30 * 60 * 1000;
 export class ProductImportController {
     private pending = new Map<string, PendingImport>();
 
-    constructor(private importWriter: ImportWriterService) {}
+    constructor(private commitQueue: ImportCommitQueueService) {}
 
     @Post('validate')
     @Allow(ImportProducts.Permission)
@@ -61,9 +61,17 @@ export class ProductImportController {
         }
         const rowsToImport = body.skipInvalidRows ? pending.rows.filter(r => !invalidRowNumbers.has(r.rowNumber)) : pending.rows;
 
-        const result = await this.importWriter.commit(ctx, rowsToImport);
+        const commitJobId = await this.commitQueue.start(ctx, rowsToImport);
         this.pending.delete(body.jobToken);
-        return { ...result, skippedRows: invalidRowNumbers.size };
+        return { commitJobId, skippedRows: invalidRowNumbers.size };
+    }
+
+    @Get('commit/:commitJobId')
+    @Allow(ImportProducts.Permission)
+    async commitStatus(@Ctx() ctx: RequestContext, @Param('commitJobId') commitJobId: string) {
+        const status = this.commitQueue.getStatus(commitJobId, ctx);
+        if (!status) throw new NotFoundException('Unknown or expired commit job');
+        return status;
     }
 
     @Get('errors/:jobToken')
