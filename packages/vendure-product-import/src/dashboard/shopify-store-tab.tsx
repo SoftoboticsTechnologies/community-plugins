@@ -157,7 +157,13 @@ export function ShopifyStoreTab() {
     }
 
     return (
-        <div className="space-y-4 max-w-md">
+        <div className="relative max-w-md">
+            <div className="absolute inset-0 z-10 flex items-start justify-center pt-2">
+                <span className="rounded-full bg-primary text-primary-foreground text-xs font-medium px-3 py-1 shadow">
+                    Coming Soon
+                </span>
+            </div>
+            <div className="space-y-4 pointer-events-none select-none blur-sm">
             <p className="text-sm text-muted-foreground">
                 Connect a Shopify store once, then pick which products to import.
             </p>
@@ -212,6 +218,7 @@ export function ShopifyStoreTab() {
                     </div>
                 </div>
             )}
+            </div>
         </div>
     );
 }

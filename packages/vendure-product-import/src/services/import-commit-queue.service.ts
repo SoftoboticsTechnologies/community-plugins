@@ -16,9 +16,17 @@ export interface CommitJobStatus {
     error?: string;
 }
 
+export interface CommitJobSummary extends CommitJobStatus {
+    jobId: string;
+    fileName?: string;
+    startedAt: number;
+}
+
 interface StoredStatus extends CommitJobStatus {
     userId: string | number | undefined;
     channelId: string | number;
+    fileName?: string;
+    startedAt: number;
     updatedAt: number;
 }
 
@@ -47,16 +55,19 @@ export class ImportCommitQueueService implements OnModuleInit {
         });
     }
 
-    async start(ctx: RequestContext, rows: ImportRow[]): Promise<string> {
+    async start(ctx: RequestContext, rows: ImportRow[], fileName?: string): Promise<string> {
         this.evictExpired();
         const job = await this.queue.add({ ctx: ctx.serialize(), rows }, { retries: 0 });
         const jobId = String(job.id);
+        const startedAt = Date.now();
         this.statuses.set(jobId, {
             state: job.state,
             progress: 0,
             userId: ctx.activeUserId,
             channelId: ctx.channelId,
-            updatedAt: Date.now(),
+            fileName,
+            startedAt,
+            updatedAt: startedAt,
         });
         job.updates({ errorOnFail: false }).subscribe(update => {
             this.statuses.set(jobId, {
@@ -66,6 +77,8 @@ export class ImportCommitQueueService implements OnModuleInit {
                 error: update.error ? String(update.error) : undefined,
                 userId: ctx.activeUserId,
                 channelId: ctx.channelId,
+                fileName,
+                startedAt,
                 updatedAt: Date.now(),
             });
         });
@@ -75,8 +88,25 @@ export class ImportCommitQueueService implements OnModuleInit {
     getStatus(jobId: string, ctx: RequestContext): CommitJobStatus | undefined {
         const status = this.statuses.get(jobId);
         if (!status || status.userId !== ctx.activeUserId || status.channelId !== ctx.channelId) return undefined;
-        const { userId, channelId, updatedAt, ...rest } = status;
+        const { userId, channelId, fileName, startedAt, updatedAt, ...rest } = status;
         return rest;
+    }
+
+    /** Every commit job for this channel still tracked (running or completed within the TTL), most recent first. */
+    listForChannel(ctx: RequestContext): CommitJobSummary[] {
+        this.evictExpired();
+        return [...this.statuses]
+            .filter(([, s]) => s.channelId === ctx.channelId)
+            .sort(([, a], [, b]) => b.startedAt - a.startedAt)
+            .map(([jobId, s]) => ({
+                jobId,
+                state: s.state,
+                progress: s.progress,
+                result: s.result,
+                error: s.error,
+                fileName: s.fileName,
+                startedAt: s.startedAt,
+            }));
     }
 
     private evictExpired() {

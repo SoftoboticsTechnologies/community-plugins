@@ -18,6 +18,7 @@ interface PendingImport {
     createdAt: number;
     userId: string | number | undefined;
     channelId: string | number;
+    fileName?: string;
 }
 
 const TTL_MS = 30 * 60 * 1000;
@@ -39,7 +40,15 @@ export class ProductImportController {
 
         this.evictExpired();
         const jobToken = randomUUID();
-        this.pending.set(jobToken, { rows, originalText: text, errors, createdAt: Date.now(), userId: ctx.activeUserId, channelId: ctx.channelId });
+        this.pending.set(jobToken, {
+            rows,
+            originalText: text,
+            errors,
+            createdAt: Date.now(),
+            userId: ctx.activeUserId,
+            channelId: ctx.channelId,
+            fileName: file.originalname,
+        });
 
         return {
             jobToken,
@@ -61,7 +70,7 @@ export class ProductImportController {
         }
         const rowsToImport = body.skipInvalidRows ? pending.rows.filter(r => !invalidRowNumbers.has(r.rowNumber)) : pending.rows;
 
-        const commitJobId = await this.commitQueue.start(ctx, rowsToImport);
+        const commitJobId = await this.commitQueue.start(ctx, rowsToImport, pending.fileName);
         this.pending.delete(body.jobToken);
         return { commitJobId, skippedRows: invalidRowNumbers.size };
     }
@@ -72,6 +81,12 @@ export class ProductImportController {
         const status = this.commitQueue.getStatus(commitJobId, ctx);
         if (!status) throw new NotFoundException('Unknown or expired commit job');
         return status;
+    }
+
+    @Get('commits')
+    @Allow(ImportProducts.Permission)
+    async listCommits(@Ctx() ctx: RequestContext) {
+        return this.commitQueue.listForChannel(ctx);
     }
 
     @Get('errors/:jobToken')
