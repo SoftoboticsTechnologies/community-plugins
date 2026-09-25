@@ -1,6 +1,6 @@
 {
     "name": "@softobotics/vendure-product-import",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "license": "GPL-3.0-or-later",
     "description": "Import Vendure products from a native CSV, a Shopify products_export.csv, or the Shopify Admin API — with pre-import validation and per-row error reporting.",
     "main": "lib/index.js",
